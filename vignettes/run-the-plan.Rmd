@@ -1,0 +1,1205 @@
+---
+title: "Run the drake plan"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Run the drake plan}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+1. [Write your own config file](https://kelshmo.github.io/sageseqr/articles/customize-config.html).
+
+2. Specify the active configuration by setting `R_CONFIG_ACTIVE`.
+
+```{r config-setup}
+Sys.setenv(R_CONFIG_ACTIVE = "ihab")
+```
+
+3. Load the `sageseqr` library and login to [Synapse](https://www.synapse.org/). `rnaseq_plan()` calls the arguments from the config file and creates the `drake` plan. Execute `drake::make(plan)` to compute. Run this code from your project root.
+
+```{r run-plan}
+#library(devtools)
+#devtools::install_git('https://github.com/kelshmo/sageseqr.git')
+#devtools::install_github('th1vairam/CovariateAnalysis@dev')
+library(sageseqr)
+library(edgeR)
+library(ggplot2)
+library(CovariateAnalysis) #get the package from devtools::install_github('th1vairam/CovariateAnalysis@dev')
+library(data.table)
+library(plyr)
+library(tidyverse)
+library(psych)
+library(limma)
+library(edgeR)
+library(biomaRt)
+library(RColorBrewer)
+library(cqn)
+library(glmnet)
+library(knitr)
+library(doParallel)
+library(foreach)
+library(githubr)
+#BiocManager::install("WGCNA")
+
+# Login to Synapse. Make a Synapse account and use synapser to login: https://r-docs.synapse.org/articles/manageSynapseCredentials.html
+synapser::synLogin()
+
+Sys.setenv(R_CONFIG_ACTIVE = "ihab")
+# TO DO: how to setup cache for end user
+# make_cache
+
+# Run the analysis
+plan <- sageseqr::rnaseq_plan(metadata_id = config::get("metadata")$synID,
+                    metadata_version = config::get("metadata")$version,
+                    counts_id = config::get("counts")$synID,
+                    counts_version = config::get("counts")$version,
+                    gene_id_input = config::get("counts")$`gene id`,
+                    sample_id_input='individualID',
+                    factor_input = config::get("factors"),
+                    continuous_input = config::get("continuous"),
+                    gene_id = config::get("biomart")$`gene id`,
+                    biomart_id = config::get("biomart")$synID,
+                    biomart_version = config::get("biomart")$version,
+                    filters = config::get("biomart")$filters,
+                    host = config::get("biomart")$host,
+                    organism = config::get("biomart")$organism, 
+                    conditions = config::get("conditions")
+)
+import_metadata <- sageseqr::get_data("syn21822937", 1L)
+import_metadata <- import_metadata[ import_metadata$individualID != 'S155', ]
+
+import_metadata$bmi <- import_metadata$weight/(import_metadata$height^2) *703
+import_metadata[  as.character(import_metadata$diagnosis) %in% 'Mild Cognitive Impairment', ]$diagnosis <- 'MCI'
+import_metadata$diagnosis <- as.factor(import_metadata$diagnosis)
+
+import_metadata[  as.character(import_metadata$race) %in% 'Asian', ]$race <- 'Other'
+import_metadata[  as.character(import_metadata$race) %in% 'Black or African American', ]$race <- 'Black_AA'
+
+import_metadata$yearsEducation <- gsub(' ', '_', import_metadata$yearsEducation)
+
+
+import_counts <- sageseqr::get_data("syn21969017", 1L)
+import_counts <- import_counts[ ,colnames(import_counts) != 'S155' ]
+import_counts[ grep('ENSG00000184895', import_counts$feature),]
+
+counts <- tibble::column_to_rownames(import_counts, var = "feature")
+
+import_metadata <- import_metadata[,c( "individualID", "sex", "race", "yearsEducation", "diagnosis", "bmi", "mocatotal",
+"AlignmentSummaryMetrics__PF_READS_ALIGNED", "AlignmentSummaryMetrics__TOTAL_READS", 
+"RnaSeqMetrics__INTERGENIC_BASES", "RnaSeqMetrics__INTRONIC_BASES", 
+"RnaSeqMetrics__PCT_CODING_BASES", "RnaSeqMetrics__PCT_INTERGENIC_BASES", 
+"RnaSeqMetrics__PCT_INTRONIC_BASES")]
+
+clean_md <- sageseqr::clean_covariates(md = import_metadata, factors = c("individualID", "sex", "race", "yearsEducation", "diagnosis" ), sample_identifier= "individualID", continuous = c("bmi", "mocatotal",
+"AlignmentSummaryMetrics__PF_READS_ALIGNED", "AlignmentSummaryMetrics__TOTAL_READS", 
+"RnaSeqMetrics__INTERGENIC_BASES", "RnaSeqMetrics__INTRONIC_BASES", 
+"RnaSeqMetrics__PCT_CODING_BASES", "RnaSeqMetrics__PCT_INTERGENIC_BASES", 
+"RnaSeqMetrics__PCT_INTRONIC_BASES"
+))
+
+biomart_results <- sageseqr::get_biomart(count_df = counts, gene_id = "ensembl_gene_id", synid = "syn21983044", 
+    version = 1L, filters = "ensembl_gene_id", host = "ensembl.org", 
+    organism = "hsa")
+
+filtered_counts <- sageseqr::filter_genes( clean_metadata = clean_md, count_df = counts, conditions = c("diagnosis", "sex"), cpm_threshold=1, conditions_threshold=.5 )
+
+cqn_counts <- sageseqr::cqn(filtered_counts, biomart_results)
+```
+
+### Sample clustering
+PCA based clustering of samples
+```{r decompse.normalise.data, fig.height=8, fig.width=8, results='asis', cache=FALSE}
+# Find principal components of expression to plot
+PC <- prcomp(cqn_counts$E.no.na, scale.=T, center = T)
+# Plot first 2 PCs
+plotdata <- data.frame(individualID=rownames(PC$rotation), 
+                       PC1=PC$rotation[,1], 
+                       PC2=PC$rotation[,2])
+plotdata <- left_join(plotdata, rownameToFirstColumn(METADATA, 'individualID'))
+p <- ggplot(plotdata, aes(x=PC1, y=PC2))
+p <- p + geom_point(aes(color=diagnosis, size=mocatotal))
+p <- p + theme_bw() + theme(legend.position="right")
+p
+```
+
+Tree based clustering of samples
+```{r decompse.normalise.data.1, fig.height=6, fig.width=10, results='asis'}
+# Eucledian tree based analysis
+COVARIATES.tmp = data.matrix(METADATA[,c( "sex", "diagnosis", 'race', 'yearsEducation')])
+COVARIATES.tmp[is.na(COVARIATES.tmp)] = 0
+tree = hclust(as.dist(t(cqn_counts$E.no.na)))
+cols = WGCNA::labels2colors(COVARIATES.tmp);
+WGCNA::plotDendroAndColors(tree, 
+                           colors = cols, 
+                           dendroLabels = FALSE, 
+                           abHeight = 0.80, 
+                           main = "Sample dendrogram",
+                           groupLabels = colnames(COVARIATES.tmp))
+```
+
+### Distribution of samples (log cpm)
+```{r lcpm.dist, cache=FALSE, fig.height=10, fig.width=20}
+# Plot abberent distribution of logcpm counts
+tmp1 = cqn_counts$E %>%
+  rownameToFirstColumn('Gene.ID') %>%
+  tidyr::gather(individualID, logCPM, -Gene.ID) %>%
+  left_join(METADATA %>%
+              rownameToFirstColumn('individualID'))
+p = ggplot(tmp1, aes(x = logCPM, color = individualID)) + geom_density() 
+p = p + theme(legend.position = 'NONE') + facet_grid(.~diagnosis, scale = 'free')
+p
+```
+
+Coexpression of genes 
+```{r coexp1, cache=FALSE, fig.height=5, fig.width=5}
+cr = cor(t(cqn_counts$E.no.na))
+hist(cr, main = 'Distribution of correlation between genes', xlab = 'Correlation')
+```
+
+### Significant Covariates
+Correlation between pca of unadjusted mRNA expression and covariates are used to find significant covariates
+```{r preadj.covariates, cache=TRUE}
+# Find correlation between PC's of gene expression with covariates
+cqn_counts$E.no.na = cqn_counts$E
+cqn_counts$E.no.na[is.na(cqn_counts$E.no.na)] = 0
+
+#clean_md
+METADATA <- as.data.frame( clean_md)
+row.names(METADATA) <- import_metadata$individualID 
+METADATA <- METADATA[, colnames(METADATA) != 'individualID' ]
+
+Meta_HeatMap <- METADATA
+preAdjustedSigCovars = runPCAandPlotCorrelations(cqn_counts$E.no.na, 
+                                                 Meta_HeatMap,
+                                                 'NULL design(voom-normalized)', 
+                                                 isKeyPlot=TRUE, 
+                                                 MIN_PVE_PCT_PC = 1)
+
+preAdjustedSigCovars[["PC_res"]][[2]]$plotData
+```
+
+
+```{r ParralelDup }
+parallelDuplicateCorrelation.lmer <- function (object, design = NULL, ndups = 2, spacing = 1, 
+block = NULL,
+                                               trim = 0.15, weights = NULL) {
+  y <- getEAWP(object)
+  M <- y$exprs
+  ngenes <- nrow(M)
+  narrays <- ncol(M)
+  if (is.null(design))
+    design <- y$design
+  if (is.null(design))
+    design <- matrix(1, ncol(y$exprs), 1)
+  else {
+    design <- as.matrix(design)
+    if (mode(design) != "numeric")
+      stop("design must be a numeric matrix")
+  }
+  if (nrow(design) != narrays)
+    stop("Number of rows of design matrix does not match number of arrays")
+  ne <- nonEstimable(design)
+  if (!is.null(ne))
+    cat("Coefficients not estimable:", paste(ne, collapse = " "),
+        "\n")
+  nbeta <- ncol(design)
+  if (missing(ndups) && !is.null(y$printer$ndups))
+    ndups <- y$printer$ndups
+  if (missing(spacing) && !is.null(y$printer$spacing))
+    spacing <- y$printer$spacing
+  if (missing(weights) && !is.null(y$weights))
+    weights <- y$weights
+  if (!is.null(weights)) {
+    weights <- as.matrix(weights)
+    if (any(dim(weights) != dim(M)))
+      weights <- array(weights, dim(M))
+    M[weights < 1e-15] <- NA
+    weights[weights < 1e-15] <- NA
+  }
+  if (is.null(block)) {
+    if (ndups < 2) {
+      warning("No duplicates: correlation between duplicates not estimable")
+      return(list(cor = NA, cor.genes = rep(NA, nrow(M))))
+    }
+    if (is.character(spacing)) {
+      if (spacing == "columns")
+        spacing <- 1
+      if (spacing == "rows")
+        spacing <- object$printer$nspot.c
+      if (spacing == "topbottom")
+        spacing <- nrow(M)/2
+    }
+    Array <- rep(1:narrays, rep(ndups, narrays))
+  }
+  else {
+    ndups <- 1
+    nspacing <- 1
+    Array <- block
+  }
+  if (is.null(block)) {
+    M <- unwrapdups(M, ndups = ndups, spacing = spacing)
+    ngenes <- nrow(M)
+    if (!is.null(weights))
+      weights <- unwrapdups(weights, ndups = ndups, spacing = spacing)
+    design <- design %x% rep(1, ndups)
+  }
+  rho <- rep(NA, ngenes)
+  nafun <- function(e) NA
+  rho = foreach(i = 1:ngenes, .combine = rbind, .packages = c("lme4"),
+                .export = c("M", "Array", "nbeta", "design", "weights",
+                            "nafun"), .verbose = F) %dopar% {
+                              y <- drop(M[i, ])
+                              o <- is.finite(y)
+                              A <- factor(Array[o])
+                              nobs <- sum(o)
+                              nblocks <- length(levels(A))
+                              if (nobs > (nbeta + 2) && nblocks > 1 && nblocks < nobs - 1) {
+                                data = cbind(data.frame(y = y[o]),
+                                             design[o, , drop = FALSE],
+                                             data.frame(A = A))
+                                formula1 = paste0('y~',paste(setdiff(colnames(data), 
+c('y','A')), collapse = '+'), '+(1|A)')
+                                if (!is.null(weights)) {
+                                  w <- drop(weights[i, ])[o]
+                                  s <- tryCatch({
+                                    mdl = lme4::lmer(formula1, data = data, weights = w);
+                                    as.data.frame(VarCorr(mdl))
+                                  }, error = nafun)
+                                }
+                                else {
+                                  s <- tryCatch({
+                                    mdl = lme4::lmer(formula1, data = data);
+                                    as.data.frame(VarCorr(mdl))
+                                  }, error = nafun)
+                                }
+                                if (!is.na(s[1]))
+                                  rho <- s$vcov[1]/sum(s$vcov)
+                                else
+                                  rho <- NA
+                              }
+                            }
+  arho <- atanh(pmax(-1, rho))
+  mrho <- tanh(mean(arho, trim = trim, na.rm = TRUE))
+  list(consensus.correlation = mrho, cor = mrho, atanh.correlations = arho)
+}
+parallelDuplicateCorrelation.mm2 <- function (object, design = NULL, ndups = 2, spacing = 1, 
+block = NULL,
+                                              trim = 0.15, weights = NULL) {
+  y <- getEAWP(object)
+  M <- y$exprs
+  ngenes <- nrow(M)
+  narrays <- ncol(M)
+  if (is.null(design))
+    design <- y$design
+  if (is.null(design))
+    design <- matrix(1, ncol(y$exprs), 1)
+  else {
+    design <- as.matrix(design)
+    if (mode(design) != "numeric")
+      stop("design must be a numeric matrix")
+  }
+  if (nrow(design) != narrays)
+    stop("Number of rows of design matrix does not match number of arrays")
+  ne <- nonEstimable(design)
+  if (!is.null(ne))
+    cat("Coefficients not estimable:", paste(ne, collapse = " "),
+        "\n")
+  nbeta <- ncol(design)
+  if (missing(ndups) && !is.null(y$printer$ndups))
+    ndups <- y$printer$ndups
+  if (missing(spacing) && !is.null(y$printer$spacing))
+    spacing <- y$printer$spacing
+  if (missing(weights) && !is.null(y$weights))
+    weights <- y$weights
+  if (!is.null(weights)) {
+    weights <- as.matrix(weights)
+    if (any(dim(weights) != dim(M)))
+      weights <- array(weights, dim(M))
+    M[weights < 1e-15] <- NA
+    weights[weights < 1e-15] <- NA
+  }
+  if (is.null(block)) {
+    if (ndups < 2) {
+      warning("No duplicates: correlation between duplicates not estimable")
+      return(list(cor = NA, cor.genes = rep(NA, nrow(M))))
+    }
+    if (is.character(spacing)) {
+      if (spacing == "columns")
+        spacing <- 1
+      if (spacing == "rows")
+        spacing <- object$printer$nspot.c
+      if (spacing == "topbottom")
+        spacing <- nrow(M)/2
+    }
+    Array <- rep(1:narrays, rep(ndups, narrays))
+  }
+  else {
+    ndups <- 1
+    nspacing <- 1
+    Array <- block
+  }
+  if (is.null(block)) {
+    M <- unwrapdups(M, ndups = ndups, spacing = spacing)
+    ngenes <- nrow(M)
+    if (!is.null(weights))
+      weights <- unwrapdups(weights, ndups = ndups, spacing = spacing)
+    design <- design %x% rep(1, ndups)
+  }
+  rho <- rep(NA, ngenes)
+  nafun <- function(e) NA
+  rho = foreach(i = 1:ngenes, .combine = rbind, .packages = c("statmod"),
+                .export = c("M", "Array", "nbeta", "design", "weights",
+                            "nafun"), .verbose = F) %dopar% {
+                              y <- drop(M[i, ])
+                              o <- is.finite(y)
+                              A <- factor(Array[o])
+                              nobs <- sum(o)
+                              nblocks <- length(levels(A))
+                              if (nobs > (nbeta + 2) && nblocks > 1 && nblocks < nobs -
+                                  1) {
+                                y <- y[o]
+                                X <- design[o, , drop = FALSE]
+                                Z <- model.matrix(~0 + A)
+                                if (!is.null(weights)) {
+                                  w <- drop(weights[i, ])[o]
+                                  s <- tryCatch(mixedModel2Fit(y, X, Z, w, only.varcomp = TRUE,
+                                                               maxit = 20)$varcomp, error = 
+nafun)
+                                }
+                                else {
+                                  s <- tryCatch(mixedModel2Fit(y, X, Z, only.varcomp = TRUE,
+                                                               maxit = 20)$varcomp, error = 
+nafun)
+                                }
+                                if (!is.na(s[1]))
+                                  rho <- s[2]/sum(s)
+                                else rho <- NA
+                              }
+                            }
+  arho <- atanh(pmax(-1, rho))
+  mrho <- tanh(mean(arho, trim = trim, na.rm = TRUE))
+  list(consensus.correlation = mrho, cor = mrho, atanh.correlations = arho)
+}
+parallelDuplicateCorrelation <- function (object, design = NULL, ndups = 2, spacing = 1, block 
+= NULL,
+                                          trim = 0.15, weights = NULL, method = 'lmer'){
+  if (method == 'lmer'){
+    parallelDuplicateCorrelation.lmer(object, design, ndups, spacing, block, trim, weights)
+  } else if (method == 'mm2'){
+    parallelDuplicateCorrelation.mm2(object, design, ndups, spacing, block, trim, weights)
+  } else {
+    error('Unknown Method')
+  }
+}
+```
+
+## Normalisation (iterative design)
+Since many covariates are correlated, re-normalising and re-adjusting COUNTS with an iterative design matrix
+1. Adding Batch and Sex a priori to variable selection
+2. Primary variable of interest Diagnosis is excluded from the pool of available covariates for selection
+```{r iterative.norm, results='asis'}
+# Primary variable of interest
+primaryVariable <- c( "mocatotal", "diagnosis")
+FactorCovariates <- c( "sex", "race", "yearsEducation")
+ContCovariates <- c("bmi", "mocatotal", 'AlignmentSummaryMetrics__PF_READS_ALIGNED', 'AlignmentSummaryMetrics__TOTAL_READS', 'RnaSeqMetrics__INTERGENIC_BASES', 'RnaSeqMetrics__INTRONIC_BASES', 'RnaSeqMetrics__PCT_CODING_BASES', 'RnaSeqMetrics__PCT_INTERGENIC_BASES')
+               
+#postAdjustCovars = c( 'sex', 'race', 'yearsEducation', 'bmi' );
+postAdjustCovars = 'bmi';
+# Assign residual covariates
+residualCovars = setdiff(preAdjustedSigCovars$significantCovars, c(postAdjustCovars, primaryVariable))
+residualSigCovars = preAdjustedSigCovars
+covariatesEffects = preAdjustedSigCovars$Effects.significantCovars[residualCovars]
+postAdjustCovars = c(postAdjustCovars, names(which.max(covariatesEffects))) %>% unique()
+loopCount = 0 
+NEW.COUNTS <- cqn_counts$E
+while(length(residualSigCovars$significantCovars)!=0 && loopCount <= 20){
+  writeLines(paste('Using following covariates in the model:',
+                   paste(postAdjustCovars, collapse=', '),
+                   'as fixed effects'))
+  
+  # Post adjusted design matrix
+  DM1 = getDesignMatrix(METADATA[,postAdjustCovars,drop=F],Intercept = F)
+  DM1$design = DM1$design[,linColumnFinder(DM1$design)$indepCols]
+  
+  # Estimate voom weights for dispersion control
+  cnts = NEW.COUNTS
+  cnts[is.na(cnts)] = 0
+  VOOM.GENE_EXPRESSION = voom(cnts, 
+                              design=DM1$design, 
+                              plot=F)
+                              #na.rm = T)
+  
+  # Fit linear model using new weights and new design
+  VOOM.ADJUSTED.FIT = lmFit(cqn_counts$E,
+                            design = DM1$design,
+                            weights = VOOM.GENE_EXPRESSION$weights)
+  
+  # Residuals after normalisation
+  RESIDUAL.GENE_EXPRESSION = residuals.MArrayLM(VOOM.ADJUSTED.FIT,
+                                                cqn_counts$E)
+  
+  # Residual covariates to choose from
+  residCovars <- setdiff(c(FactorCovariates,ContCovariates), c(postAdjustCovars, primaryVariable))
+  
+  # Find PC of residual gene expression and significant covariates that are highly correlated with PCs
+  expr = RESIDUAL.GENE_EXPRESSION
+  expr[is.na(expr)] = 0
+  residualSigCovars = runPCAandPlotCorrelations(expr, 
+                                                METADATA[, residCovars, drop=F], 
+                                                'adjusted design(voom-normalized)',
+                                                isKeyPlot=TRUE)
+  
+  # Add postadjusted covariates (if any)
+  residCovars = setdiff(residualSigCovars$significantCovars, c(postAdjustCovars, primaryVariable))
+  covariatesEffects = residualSigCovars$Effects.significantCovars[residCovars]
+  
+  postAdjustCovars = c(postAdjustCovars, names(which.max(covariatesEffects)))
+  loopCount = loopCount + 1
+}
+modelStr <- paste(paste(gsub('_','\\\\_',postAdjustCovars), collapse=', '),
+                  'as fixed effects')
+tmp <- paste('Using following covariates in the final model:', modelStr)
+```
+
+
+### Sanity check
+```{r residual.adj, fig.width=12, fig.height=8}
+# Find PC of residual gene expression and significant covariates that are highly correlated with PCs
+residualSigCovars = runPCAandPlotCorrelations(expr, 
+                                              METADATA,
+                                              'adjusted design(voom-normalized)',
+                                              isKeyPlot=TRUE)
+residualSigCovars[["PC_res"]][[2]]$plotData
+```
+Coexpression of genes 
+```{r coexp2, cache=FALSE, fig.height=5, fig.width=5}
+cr = cor(t(expr))
+hist(cr, main = 'Distribution of correlation between genes', xlab = 'Correlation')
+```
+PCA of residual data
+```{r decompse.normalise.data2.1, fig.height=6, fig.width=8, results='asis'}
+# Find principal components of expression to plot
+PC <- prcomp(expr, scale.=T, center = T)
+# Plot first 4 PCs
+plotdata <- data.frame(individualID=rownames(PC$rotation), 
+                       PC1=PC$rotation[,1], 
+                       PC2=PC$rotation[,2])
+plotdata <- left_join(plotdata, rownameToFirstColumn(METADATA, 'individualID'))
+p <- ggplot(plotdata, aes(x=PC1, y=PC2)) 
+p <- p + geom_point(aes(color=diagnosis, size=mocatotal))
+p <- p + theme_bw() + theme(legend.position="right")
+p
+```
+Tree based clustering of residual data
+```{r decompse.normalise.data2.2, fig.height=8, fig.width=12, results='asis'}
+# Eucledian tree based analysis
+COVARIATES.tmp = data.matrix(METADATA[,c( 'sex', 'yearsEducation', 'race', primaryVariable)])
+COVARIATES.tmp[is.na(COVARIATES.tmp)] = 0
+tree = hclust(as.dist(t(expr)))
+cols = WGCNA::labels2colors(COVARIATES.tmp);
+WGCNA::plotDendroAndColors(tree, 
+                           colors = cols, 
+                           dendroLabels = FALSE, 
+                           abHeight = 0.80, 
+                           main = "Sample dendrogram",
+                           groupLabels = colnames(COVARIATES.tmp))
+```
+
+### Adjust data with covariates for Network Analysis
+Identified covariates are regressed out from the expression matrix for network analysis
+```{r network.adjust}
+# Get design matrix
+DESIGN.NET = getDesignMatrix(METADATA[, postAdjustCovars, drop = F], Intercept = F)
+DESIGN.NET = DESIGN.NET$design[,linColumnFinder(DESIGN.NET$design)$indepCols]
+# Estimate voom weights for dispersion control
+cnts = NEW.COUNTS
+cnts[is.na(cnts)] = 0
+VOOM.NET.WEIGHTS = voom(cnts, design=DESIGN.NET, plot=F)
+# Fit linear model using new weights and new design
+VOOM.NET.FIT = lmFit(cqn_counts$E,
+                     design = DESIGN.NET,
+                     weights = VOOM.NET.WEIGHTS$weights)
+# Residuals after normalisation
+RESIDUAL.NET.GENE_EXPRESSION = residuals.MArrayLM(VOOM.NET.FIT,
+                                                  cqn_counts$E)
+```
+
+
+### Differential expression analysis (with Diagnosis as primary variable)
+Differential expression is performed on the primary variable by controlling for covariates identified above
+
+Interpretation of Diagnosis
+1. MCI: Mildly Impaired
+2. CONTROL: cognitivly non-impaired
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+```{r diff.exp1, fig.height=6, fig.width=18, cache=FALSE}
+# Get design matrix
+DESIGN = getDesignMatrix(METADATA[, c(primaryVariable[2], postAdjustCovars), drop = F], Intercept = F)
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+# Estimate voom weights for dispersion control
+VOOM.WEIGHTS = voom(cqn_counts$counts, design=DESIGN$design, plot=F)
+#_#VOOM.WEIGHTS = voom(cnts, design=DESIGN$design, plot=F)
+# Fit linear model using new weights and new design
+FIT = lmFit(cqn_counts$E,
+            design = DESIGN$design,
+            weights = VOOM.WEIGHTS$weights)
+# Fit contrast
+contrast = makeContrasts(contrasts=c("diagnosisMCI-diagnosisControl"),
+                         levels = colnames(FIT$coefficients))
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = c('MCI-CONTROL')
+DE = DE %>% 
+  rbindlist(idcol = 'Comparison') %>%
+  left_join(biomart_results %>%
+              dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gene_gc_content, gene_length) %>%
+              unique()) %>%
+  dplyr::mutate(Study = 'Emory_Vascular',
+                Direction = logFC/abs(logFC),
+                Direction = factor(Direction, c(-1,1), c('-1' = 'DOWN', '1' = 'UP')),
+                Direction = as.character(Direction))
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+writeLines('Differentially expressed genes at an FDR 0.05 and logFC 1.2')
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Comparison, Direction) %>%
+  group_by(Comparison, Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+p = DE %>% dplyr::filter(Comparison == 'MCI-CONTROL') %>% 
+  ggplot(aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
+p = p + scale_color_manual(values = c('green','grey','red'))
+p = p + facet_grid(.~Comparison, scales = 'fixed')
+p
+all.diff.exp = c(all.diff.exp, list(Diagnosis = DE))
+all.fit = c(all.fit, list(Diagnosis = FIT))
+```
+
+
+### Differential expression analysis (with sex)
+Differential expression is performed on the primary variable by controlling for covariates identified above
+
+Interpretation of Diagnosis
+1. MCI: Mildly Impaired
+2. CONTROL: cognitivly non-impaired
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+```{r diff.exp1, fig.height=6, fig.width=18, cache=FALSE}
+# Get design matrix
+DESIGN = getDesignMatrix(METADATA[, c('sex', postAdjustCovars), drop = F], Intercept = F)
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+# Estimate voom weights for dispersion control
+VOOM.WEIGHTS = voom( cqn_counts$counts, design=DESIGN$design, plot=F )
+#VOOM.WEIGHTS = voom( cqn_counts$E, design=DESIGN$design, plot=F )
+
+# Fit linear model using new weights and new design
+#LOG_Exp <- log2(cqn_counts$E)
+#LOG_Exp[is.na(LOG_Exp)]
+FIT = lmFit(cqn_counts$E,
+            design = DESIGN$design,
+            weights = VOOM.WEIGHTS$weights)
+# Fit contrast
+contrast = makeContrasts(contrasts=c("sexfemale"),
+                         levels = colnames(FIT$coefficients))
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = c('Sex')
+biomart_results$ensembl_gene_id <- row.names(biomart_results)
+DE = DE %>% 
+  rbindlist(idcol = 'Comparison') %>%
+  left_join(biomart_results %>%
+              dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gene_gc_content, gene_length) %>%
+              unique()) %>%
+  dplyr::mutate(Study = 'Emory_Vascular',
+                Direction = logFC/abs(logFC),
+                Direction = factor(Direction, c(-1,1), c('-1' = 'DOWN', '1' = 'UP')),
+                Direction = as.character(Direction))
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+writeLines('Differentially expressed genes at an FDR 0.05 and logFC 1.2')
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Comparison, Direction) %>%
+  group_by(Comparison, Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+p = DE %>% dplyr::filter(Comparison == 'sex') %>% 
+  ggplot(aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
+p = p + scale_color_manual(values = c('green','grey','red'))
+p = p + facet_grid(.~Comparison, scales = 'fixed')
+p
+all.diff.exp = c(all.diff.exp, list(Diagnosis = DE))
+all.fit = c(all.fit, list(Diagnosis = FIT))
+```
+
+
+### Differential expression analysis (with Diagnosis and Sex)
+Differential expression is performed on the Diagnosis x Sex variable by controlling for covariates identified above
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+```{r diff.exp3, fig.height=6, fig.width=18, cache=FALSE}
+## Modeling Diagnosis, msex and age_death conjointly
+METADATA$Diagnosis.Sex = paste(METADATA$diagnosis,METADATA$sex, sep = '.') %>%
+  factor
+# Get design matrix
+DESIGN = getDesignMatrix(METADATA[, c('Diagnosis.Sex', setdiff(postAdjustCovars, 'Sex')), drop = F], Intercept = F)
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+colnames(DESIGN$design) = gsub('Diagnosis.Sex','',colnames(DESIGN$design))
+# Estimate voom weights for dispersion control
+VOOM.WEIGHTS = voom(cnts, design=DESIGN$design, plot=F)
+# Fit linear model using new weights and new design
+FIT = lmFit(CQN.GENE_EXPRESSION$E,
+            design = DESIGN$design,
+            weights = VOOM.WEIGHTS$weights)
+# Fit contrast
+contrast = makeContrasts(contrasts=c("(MCI.female+MCI.male)/2-(Control.female+Control.male)/2",
+                                     "(MCI.female+Control.female)/2-(MCI.male+Control.male)/2",
+                                     "(MCI.female-Control.female)/2-(MCI.male-Control.male)/2",
+                                     "MCI.female-Control.female",
+                                     "MCI.male-Control.male"),
+                         levels = colnames(FIT$coefficients))
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(NEW.COUNTS)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = c('MCI-CONTROL','FEMALE-MALE','MCI-CONTROL.IN.FEMALE-MALE','MCI-CONTROL.IN.FEMALE', 'MCI-CONTROL.IN.MALE')
+DE = DE %>% 
+  rbindlist(idcol = 'Comparison') %>%
+  left_join(GENE.PARAM %>%
+              dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gc_content, gene.length) %>%
+              unique()) %>%
+  dplyr::mutate(Study = 'ROSMAP', Region = 'DLPFC',
+                Direction = logFC/abs(logFC),
+                Direction = factor(Direction, c(-1,1), c('-1' = 'DOWN', '1' = 'UP')),
+                Direction = as.character(Direction))
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+writeLines('Differentially expressed genes at an FDR 0.05 and logFC 1.2')
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Comparison, Direction) %>%
+  group_by(Comparison, Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+p = ggplot(DE, aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
+p = p + scale_color_manual(values = c('green','grey','red'))
+p = p + facet_grid(.~Comparison, scales = 'fixed')
+p
+all.diff.exp = c(all.diff.exp, list(Diagnosis.Sex = DE))
+all.fit = c(all.fit, list(Diagnosis.Sex = FIT))
+```
+
+
+```{r AssociateToSex }
+# Get design matrix
+DESIGN = getDesignMatrix(METADATA[, c('diagnosis', primaryVariable[2], postAdjustCovars), drop = F], Intercept = F)
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+# Estimate voom weights for dispersion control
+VOOM.WEIGHTS = voom(CQN.GENE_EXPRESSION$E, design=DESIGN$design, plot=F)
+# Fit linear model using new weights and new design
+FIT = lmFit(CQN.GENE_EXPRESSION$E,
+            design = DESIGN$design,
+            weights = VOOM.WEIGHTS$weights)
+# Fit contrast
+contrast = makeContrasts(contrasts=c("sexfemale-sexmale"),
+                         levels = colnames(FIT$coefficients))
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = c('MCI-CONTROL')
+DE = DE %>% 
+  rbindlist(idcol = 'Comparison') %>%
+  left_join(biomart_results %>%
+              dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gene_gc_content, gene_length) %>%
+              unique()) %>%
+  dplyr::mutate(Study = 'Emory_Vascular',
+                Direction = logFC/abs(logFC),
+                Direction = factor(Direction, c(-1,1), c('-1' = 'DOWN', '1' = 'UP')),
+                Direction = as.character(Direction))
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+writeLines('Differentially expressed genes at an FDR 0.05 and logFC 1.2')
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Comparison, Direction) %>%
+  group_by(Comparison, Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+p = DE %>% dplyr::filter(Comparison == 'MCI-CONTROL') %>% 
+  ggplot(aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
+p = p + scale_color_manual(values = c('green','grey','red'))
+p = p + facet_grid(.~Comparison, scales = 'fixed')
+p
+all.diff.exp = c(all.diff.exp, list(Diagnosis = DE))
+all.fit = c(all.fit, list(Diagnosis = FIT))
+```
+
+
+
+
+
+#################AFTER
+### Normalisation (iterative design)
+Since many covariates are correlated, re-normalising and re-adjusting COUNTS with an iterative design matrix
+1. Adding Sex, bmi, race, and years education a priori to variable selection
+2. Primary variable of interest Diagnosis is excluded from the pool of available covariates for selection
+```{r iterative.norm, cache=FALSE, results='asis'}
+library(variancePartition)
+#NEW.COUNTS <- cqn_counts$E.no.na
+NEW.COUNTS <- cqn_counts$counts
+METADATA$Individual_ID <- row.names(METADATA)
+# Primary variable of interest
+primaryVariable <- c("mocatotal", "diagnosis")
+
+#Leave out bmi because of missing weight variable 
+## postAdjustCovars = c( 'sex', 'race', 'yearsEducation' );
+postAdjustCovars = c( 'race', 'yearsEducation', 'bmi');
+
+# Assign residual covariates
+residualCovars = setdiff(preAdjustedSigCovars$significantCovars, c(postAdjustCovars, primaryVariable))
+residualSigCovars = preAdjustedSigCovars
+covariatesEffects = preAdjustedSigCovars$Effects.significantCovars[residualCovars]
+postAdjustCovars = c(postAdjustCovars, names(which.max(covariatesEffects))) %>% unique()
+
+#_#Set the cov list
+total_cov <- c( preAdjustedSigCovars$significantCovars, postAdjustCovars, primaryVariable )
+FactorCovariates <- total_cov[ total_cov %in% config::get('factors') ] 
+ContCovariates <- total_cov[ total_cov %in% config::get('continuous')[ -grep( 'PCT_RIBOSOMAL', config::get('continuous'))] ] 
+  
+loopCount = 0 
+notEstimable<-NULL
+while(length(residualSigCovars$significantCovars)!=0 && loopCount <= 20){
+  writeLines(paste('Using following covariates in the model:',
+                   paste(postAdjustCovars, collapse=', '),
+                   'as fixed effects'))
+  
+  DM1 = getDesignMatrix(METADATA[,postAdjustCovars,drop=F],Intercept = F)
+  DM1$design = DM1$design[,linColumnFinder(DM1$design)$indepCols]
+  
+  VOOM.GENE_EXPRESSION = voom(NEW.COUNTS, 
+                              design=DM1$design, 
+                              plot=F)
+  
+  # Fit linear model using new weights and new design
+  ##Replace CQN.GENE_EXPRESSION$E w/ new pipeline cqn
+  VOOM.ADJUSTED.FIT = lmFit(cqn_counts$E,
+                            design = DM1$design,
+                            weights = VOOM.GENE_EXPRESSION$weights)
+  
+  # Residuals after normalisation
+  RESIDUAL.GENE_EXPRESSION = residuals.MArrayLM(VOOM.ADJUSTED.FIT,
+                                                cqn_counts$E)
+  
+  # Residual covariates to choose from
+  residCovars <- setdiff(c(FactorCovariates,ContCovariates), c(postAdjustCovars, primaryVariable))
+  
+  # Find PC of residual gene expression and significant covariates that are highly correlated with PCs
+  expr = RESIDUAL.GENE_EXPRESSION
+  expr[is.na(expr)] = 0
+  residualSigCovars = runPCAandPlotCorrelations(expr, 
+                                                METADATA[, residCovars, drop=F], 
+                                                'adjusted design(voom-normalized)',
+                                                isKeyPlot=TRUE)
+  
+  # Add postadjusted covariates (if any)
+  residCovars = setdiff(residualSigCovars$significantCovars, c(postAdjustCovars, primaryVariable))
+  covariatesEffects = residualSigCovars$Effects.significantCovars[residCovars]
+  
+  postAdjustCovars = c(postAdjustCovars, names(which.max(covariatesEffects)))
+  loopCount = loopCount + 1
+}
+modelStr <- paste(paste(gsub('_','\\\\_',postAdjustCovars), collapse=', '),
+                  'as fixed effects')
+tmp <- paste('Using following covariates in the final model:', modelStr)
+```
+`r tmp`
+
+### Sanity check
+```{r residual.adj, cache=FALSE, fig.width=12, fig.height=8}
+# Find PC of residual gene expression and significant covariates that are highly correlated with PCs
+residualSigCovars = runPCAandPlotCorrelations(expr, 
+                                              Meta_HeatMap,
+                                              'adjusted design(voom-normalized)',
+                                              isKeyPlot=TRUE)
+residualSigCovars[["PC_res"]][[2]]$plotData
+```
+
+Coexpression of genes 
+```{r coexp2, cache=FALSE, fig.height=5, fig.width=5}
+cr = cor(t(expr))
+hist(cr, main = 'Distribution of correlation between genes', xlab = 'Correlation')
+```
+
+PCA of residual data
+```{r decompse.normalise.data2.1, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+# Find principal components of expression to plot
+PC <- prcomp(expr, scale.=T, center = T)
+# Plot first 4 PCs
+METADATA <- METADATA[ , c('Individual_ID', colnames(METADATA)[ (colnames(METADATA) %in% 'Individual_ID')==F ]) ]
+plotdata <- data.frame(Individual_ID=rownames(PC$rotation), 
+                       PC1=PC$rotation[,1], 
+                       PC2=PC$rotation[,2])
+plotdata <- left_join(plotdata, rownameToFirstColumn(METADATA, 'Induvidual_ID'))
+p <- ggplot(plotdata, aes(x=PC1, y=PC2)) 
+p <- p + geom_point(aes(color=diagnosis, size=mocatotal))
+#p <- p + geom_point()
+p <- p + theme_bw() + theme(legend.position="right")
+p
+```
+Tree based clustering of residual data
+```{r decompse.normalise.data2.2, cache=FALSE, fig.height=6, fig.width=10, results='asis'}
+# Eucledian tree based analysis
+COVARIATES.tmp = data.matrix(METADATA[,c( 'sex', 'race', 'yearsEducation', primaryVariable) ])
+COVARIATES.tmp[is.na(COVARIATES.tmp)] = 0
+tree = hclust(as.dist(t(expr)))
+cols = WGCNA::labels2colors(COVARIATES.tmp);
+WGCNA::plotDendroAndColors(tree, 
+                           colors = cols, 
+                           dendroLabels = FALSE, 
+                           abHeight = 0.80, 
+                           main = "Sample dendrogram",
+                           groupLabels = colnames(COVARIATES.tmp))
+```
+
+### Adjust data with covariates for Network Analysis
+Identified covariates are regressed out from the expression matrix for network analysis
+```{r network.adjust}
+# Get design matrix
+DESIGN.NET = getDesignMatrix(METADATA[, postAdjustCovars, drop = F], Intercept = F)
+DESIGN.NET = DESIGN.NET$design[,linColumnFinder(DESIGN.NET$design)$indepCols]
+# Estimate voom weights for dispersion control
+cnts = NEW.COUNTS
+cnts[is.na(cnts)] = 0
+VOOM.NET.WEIGHTS = voom(cnts, design=DESIGN.NET, plot=F)
+# Fit linear model using new weights and new design
+VOOM.NET.FIT = lmFit(cqn_counts$E,
+                     design = DESIGN.NET,
+                     weights = VOOM.NET.WEIGHTS$weights)
+# Residuals after normalisation
+RESIDUAL.NET.GENE_EXPRESSION = residuals.MArrayLM(VOOM.NET.FIT,
+                                                  cqn_counts$E)
+```
+
+
+### Differential expression analysis (with diagnosis as primary variable)
+Differential expression is performed on the primary variable by controlling for covariates identified above
+
+Interpretation of Diagnosis
+1. Mild Cognitive Impairment: Samples from individuals defined as Mildly cognitivly impared
+2. CONTROL:  Samples from individuals defined as not cognitivly impared
+
+Genes that are differentially expressed at an FDR <= 0.05 are
+```{r diff.exp1, fig.height=15, fig.width=13}
+# Get design matrix
+DESIGN = getDesignMatrix(METADATA[, c(primaryVariable[2], postAdjustCovars), drop = F], Intercept = F)
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+# Re-estimate voom weights
+VOOM.WEIGHTS = voom(cqn_counts$E,
+                    design=DESIGN$design, plot=F)
+# Fit linear model using new weights and new design
+VOOM.WEIGHTS$E = cqn_counts$E
+FIT = lmFit(VOOM.WEIGHTS)
+# Fit contrast
+cntr = c()
+cntr <- 'diagnosisControl-diagnosisMCI'
+contrast = makeContrasts(contrasts=cntr,
+                         levels = colnames(FIT$coefficients))
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(cqn_counts$E)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = colnames(contrast)
+
+biomart_results$ensembl_gene_id <- row.names(biomart_results)
+DE = DE %>% 
+  data.table::rbindlist(idcol = 'Comparison') %>%
+  dplyr::mutate(Comparison = gsub('Diagnosis','',Comparison),
+                Study = 'Emory_Vascular',
+                Sex = 'ALL') %>%
+  tidyr::separate(Comparison, c('from.state','to.state'), sep = '-') %>%
+  tidyr::unite(Comparison, from.state, to.state, sep = '-') %>%
+  dplyr::left_join(biomart_results %>%
+                     dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gene_gc_content, gene_length) %>%
+                     unique())
+DE$Direction = 'NONE'
+DE$Direction[DE$adj.P.Val <= 0.05 & DE$logFC <= -log2(1.2)] = 'DOWN'
+DE$Direction[DE$adj.P.Val <= 0.05 & DE$logFC >= log2(1.2)] = 'UP'
+
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Direction) %>%
+  group_by(Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+p = ggplot(DE, aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
+p = p + scale_color_manual(values = c('green','grey','red')) + theme(legend.position='top')
+#p = p + facet_grid(Tissue+.~Comparison, scales = 'fixed')
+p
+DE$Comparison <- 'MCI-CONTROL'
+all.diff.exp <- list()
+all.fit <- list()
+all.diff.exp = c(all.diff.exp, list(Diagnosis = DE))
+all.fit = c(all.fit, list(Diagnosis = FIT))
+```
+
+### Associate differential expression results with gc content, gene length and average expression
+```{r associate.de, fig.height=15, fig.width=15}
+pl = list()
+pl[[1]] = ggplot(DE %>% dplyr::filter(Comparison == 'MCI-CONTROL'), 
+                 aes(x = log10(gene_length), y = logFC, color = Direction)) + geom_point() 
+pl[[1]] = pl[[1]] + geom_smooth(method = 'loess', inherit.aes = FALSE, aes(x = log10(gene_length), y = logFC))
+#pl[[1]] = pl[[1]] + facet_grid(.+Comparison) + scale_color_manual(values = c('green','grey','red'))
+pl[[1]] = pl[[1]] + theme(legend.position = 'top')
+pl[[2]] = ggplot(DE %>% dplyr::filter(Comparison == 'MCI-CONTROL'), 
+                 aes(x = percentage_gene_gc_content, y = logFC, color = Direction)) + geom_point()
+pl[[2]] = pl[[2]] + geom_smooth(method = 'loess', inherit.aes = FALSE, aes(x = percentage_gene_gc_content, y = logFC))
+#pl[[2]] = pl[[2]] + facet_grid(Tissue~.+Comparison) + scale_color_manual(values = c('green','grey','red'))
+pl[[2]] = pl[[2]] + theme(legend.position = 'top')
+pl[[3]] = ggplot(DE %>% dplyr::filter(Comparison == 'MCI-CONTROL'), 
+                 aes(x = AveExpr, y = logFC, color = Direction)) + geom_point()
+pl[[3]] = pl[[3]] + geom_smooth(method = 'loess', inherit.aes = FALSE, aes(x = AveExpr, y = logFC))
+#pl[[3]] = pl[[3]] + facet_grid(Tissue~.+Comparison) + scale_color_manual(values = c('green','grey','red'))
+pl[[3]] = pl[[3]] + theme(legend.position = 'top')
+multiplot(plotlist = pl, cols = 3)
+```
+
+### Differential expression analysis (with Diagnosis and Sex)
+Differential expression is performed on the Diagnosis x Sex variable by controlling for covariates identified above
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+```{r diff.exp3, fig.height=6, fig.width=18, cache=FALSE}
+## Modeling Diagnosis, msex and age_death conjointly
+METADATA$Diagnosis.Sex = paste(METADATA$diagnosis,METADATA$sex, sep = '.') %>%
+  factor
+# Get design matrix
+DESIGN = getDesignMatrix(METADATA[, c('Diagnosis.Sex', setdiff(postAdjustCovars, 'sex')), drop = F], Intercept = F)
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+colnames(DESIGN$design) = gsub('Diagnosis.Sex','',colnames(DESIGN$design))
+# Estimate voom weights for dispersion control
+VOOM.WEIGHTS = voom(cqn_counts$E, design=DESIGN$design, plot=F)
+# Fit linear model using new weights and new design
+FIT = lmFit(cqn_counts$E,
+            design = DESIGN$design,
+            weights = VOOM.WEIGHTS$weights)
+# Fit contrast
+contrast = makeContrasts(contrasts=c("(MCI.female+MCI.male)/2-(Control.female+Control.male)/2",
+  "(MCI.female+Control.female)/2-(MCI.male+Control.male)/2",                                  "(MCI.female-Control.female)/2-(MCI.male-Control.male)/2",
+  "MCI.female-Control.female",
+  "MCI.male-Control.male"),
+  levels = colnames(FIT$coefficients))
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(cqn_counts$E)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = c('MCI-CONTROL','FEMALE-MALE','MCI-CONTROL.IN.FEMALE-MALE','MCI-CONTROL.IN.FEMALE', 'MCI-CONTROL.IN.MALE')
+DE = DE %>% 
+  rbindlist(idcol = 'Comparison') %>%
+  left_join(biomart_results %>%
+              dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gene_gc_content, gene_length) %>%
+              unique()) %>%
+  dplyr::mutate(Study = 'Emory_Vascular',
+                Direction = logFC/abs(logFC),
+                Direction = factor(Direction, c(-1,1), c('-1' = 'DOWN', '1' = 'UP')),
+                Direction = as.character(Direction))
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+writeLines('Differentially expressed genes at an FDR 0.05 and logFC 1.2')
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Comparison, Direction) %>%
+  group_by(Comparison, Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+p = ggplot(DE, aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
+p = p + scale_color_manual(values = c('green','grey','red'))
+p = p + facet_grid(.~Comparison, scales = 'fixed')
+p
+all.diff.exp = c(all.diff.exp, list(Diagnosis.Sex = DE))
+all.fit = c(all.fit, list(Diagnosis.Sex = FIT))
+```
+
+
+### Differential expression analysis (with Diagnosis and MOCHATotal)
+Differential expression is performed on the Diagnosis x MOCHATotal variable by controlling for covariates identified above
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+```{r diff.exp4, fig.height=15, fig.width=13}
+# Get design matrix
+DESIGN = getDesignMatrix(METADATA[, c(primaryVariable[2], setdiff(postAdjustCovars, 'mocatotal')), drop = F], Intercept = F)
+ind = grep('diagnosis', colnames(DESIGN$design))
+DESIGN$design[,ind] = DESIGN$design[,ind] * METADATA[rownames(DESIGN$design),'mocatotal']
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+colnames(DESIGN$design)[ind] = gsub('diagnosis', '', paste0(colnames(DESIGN$design)[ind], 'mocatotal'))
+# Re-estimate voom weights
+VOOM.WEIGHTS = voom( cqn_counts$E,
+                    design=DESIGN$design, plot=F)#,
+                    #block = METADATA$Individual_ID, 
+                    #correlation = correlation$cor)
+# Fit linear model using new weights and new design
+VOOM.WEIGHTS$E = cqn_counts$E
+FIT = lmFit(VOOM.WEIGHTS)
+# Fit contrast
+cntr = c( "MCImocatotal-Controlmocatotal" )#,
+         #"IFG.AD.AOD-IFG.CONTROL.AOD",
+         #"PHG.AD.AOD-PHG.CONTROL.AOD",
+         #"STG.AD.AOD-STG.CONTROL.AOD")
+contrast = makeContrasts(contrasts=cntr,
+                         levels = colnames(FIT$coefficients))
+colnames(contrast) = cntr
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(cqn_counts$counts)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = colnames(contrast)
+DE = DE %>% 
+  data.table::rbindlist(idcol = 'Comparison') %>%
+  dplyr::mutate( Sex = 'ALL') %>%
+  tidyr::separate(Comparison, c('from.state','to.state'), sep = '-') %>%
+  #tidyr::separate(from.state, c('reference','Sex'), sep = '\\.') %>%
+  #tidyr::separate(to.state, c('Tissue1','against','Sex1'), sep = '\\.') %>%
+  tidyr::unite(Comparison, from.state, to.state, sep = '-') %>%
+  #dplyr::select(-Tissue1, -Sex1, -Sex) %>%
+  dplyr::left_join(biomart_results %>%
+                     dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gene_gc_content, gene_length) %>%
+                     unique())
+DE$Direction = 'NONE'
+DE$Direction[DE$adj.P.Val <= 0.05 & DE$logFC <= -log2(1.2)] = 'DOWN'
+DE$Direction[DE$adj.P.Val <= 0.05 & DE$logFC >= log2(1.2)] = 'UP'
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Comparison, Direction) %>%
+  group_by(Comparison, Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+all.diff.exp = c(all.diff.exp, list(Diagnosis.mocatotal = DE))
+all.fit = c(all.fit, list(Diagnosis.AOD = FIT))
+```
+
+
+### Differential expression analysis by Sex (sanity check)
+Differential expression is performed on  Sex variable by controlling for covariates identified above
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+```{r diff.exp3, fig.height=6, fig.width=18, cache=FALSE}
+## Modeling Diagnosis, msex and age_death conjointly
+#METADATA$Diagnosis.Sex = paste(METADATA$diagnosis,METADATA$sex, sep = '.') %>%
+#  factor
+# Get design matrix
+DESIGN = getDesignMatrix(METADATA[, c( 'sex',setdiff(postAdjustCovars, 'sex')), drop = F], Intercept = F)
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+colnames(DESIGN$design) = gsub('sex','',colnames(DESIGN$design))
+# Estimate voom weights for dispersion control
+VOOM.WEIGHTS = voom(cqn_counts$E.no.na, design=DESIGN$design, plot=F)
+# Fit linear model using new weights and new design
+FIT = lmFit(cqn_counts$E.no.na,
+            design = DESIGN$design,
+            weights = VOOM.WEIGHTS$weights)
+# Fit contrast
+contrast = makeContrasts(contrasts=c("male-female"),
+  levels = colnames(FIT$coefficients))
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(cqn_counts$E)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = c('FEMALE-MALE')
+DE = DE %>% 
+  rbindlist(idcol = 'Comparison') %>%
+  left_join(biomart_results %>%
+              dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gene_gc_content, gene_length) %>%
+              unique()) %>%
+  dplyr::mutate(Study = 'Emory_Vascular',
+                Direction = logFC/abs(logFC),
+                Direction = factor(Direction, c(-1,1), c('-1' = 'DOWN', '1' = 'UP')),
+                Direction = as.character(Direction))
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+writeLines('Differentially expressed genes at an FDR 0.05 and logFC 1.2')
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Comparison, Direction) %>%
+  group_by(Comparison, Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+p = ggplot(DE, aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
+p = p + scale_color_manual(values = c('green','grey','red'))
+p = p + facet_grid(.~Comparison, scales = 'fixed')
+p
+all.diff.exp = c(all.diff.exp, list(Diagnosis.Sex = DE))
+all.fit = c(all.fit, list(Diagnosis.Sex = FIT))
+```
+
+
+### Sex Chromosome-specific Gene Expression Patterns
+
+```{r Reported_Gender_plots}
+COUNT$gene_id = rownames(COUNT) 
+REPORTED.GENDER.COUNTS = GENE.GC.CONT %>% 
+  left_join(COUNT) %>%
+  dplyr::select(-one_of("percentage_gene_gc_content")) %>%
+  filter(chromosome_name == "X" |chromosome_name == "Y") %>% 
+  tidyr::gather(key = item, value = value, -c(gene_id, chromosome_name)) %>%
+  dplyr::mutate(value = log(value)) %>%
+  dplyr::rename(`counts(log)`= value) %>% 
+  dplyr::rename(SampleID = item) %>%
+  left_join(METADATA[,c("SampleID", "Reported_Gender")]) %>% 
+  dplyr::rename(`Reported Gender` = Reported_Gender) 
+my.theme <- theme_bw() %+replace% theme(legend.position = 'top', axis.text.x = element_text(angle = 90, hjust = 1), plot.title=element_text(hjust=0.5))
+p = list()
+p[[1]] = ggplot(filter(REPORTED.GENDER.COUNTS, chromosome_name == "X"), aes(x = `Reported Gender`, y = `counts(log)`)) + geom_boxplot()
+p[[1]] = p[[1]] + ggtitle('X') + my.theme
+p[[2]] = ggplot(filter(REPORTED.GENDER.COUNTS, chromosome_name == "Y"), aes(x = `Reported Gender`, y = `counts(log)`)) + geom_boxplot()
+p[[2]] = p[[2]] + ggtitle('Y') + my.theme
+multiplot(plotlist = p, cols = 2)
+##XIST and UTY expression 
+#ENSG00000229807.11 and ENSG00000183878.15 
+FILT <- REPORTED.GENDER.COUNTS %>% 
+  filter(gene_id == "ENSG00000229807.11" | gene_id == "ENSG00000183878.15") %>% 
+  dplyr::select(-one_of("chromosome_name")) %>% 
+  tidyr::spread(key = gene_id, value = `counts(log)`) %>% 
+  mutate(XIST = as.numeric(`ENSG00000229807.11`)) %>% 
+  mutate(UTY = as.numeric(`ENSG00000183878.15`)) %>% 
+  mutate(UTY = ifelse(UTY == -Inf, 0, UTY)) %>% 
+  mutate(XIST = ifelse(XIST == -Inf, 0, XIST))
+p = ggplot(FILT, aes (x= XIST, y = UTY)) 
+p = p + geom_point(aes(color=`Reported Gender`)) + 
+  ggtitle("Sex Check HBCC Cohort") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 15)) +
+  labs(colour = "Reported Gender")
+p
+```
+
+
+

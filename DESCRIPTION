@@ -1,0 +1,53 @@
+Package: sageseqr
+Title: Identify differentially expressed genes counts data
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Kelsey",
+           family = "Montgomery",
+           role = c("aut", "cre"),
+           email = "kelsey.montgomery@sagebase.org",
+           comment = c(ORCID = "0000-0002-0126-8944"))
+Description: This workflow normalizes counts, performs model selection from known 
+    covariates using multivariate regression, automates outlier analysis using a 
+    customizable threshold and performs differential expression analysis for repeated
+    measures.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Suggests: 
+    testthat (>= 2.1.0)
+RoxygenNote: 7.1.0
+biocViews:
+Imports:
+    biomaRt,
+    config,
+    CovariateAnalysis,
+    cqn,
+    data.table,
+    drake,
+    dplyr,
+    edgeR,
+    foreach,
+    GenomicRanges,
+    glue,
+    ggplot2,
+    IRanges,
+    knitr,
+    limma,
+    magrittr,
+    mclust,
+    plyr,
+    psych,
+    RColorBrewer,
+    rlang,
+    synapser,
+    tidyr,
+    tibble,
+    utils,
+    quantreg
+Additional_repositories:
+    http://ran.synapse.org
+Remotes:
+    th1vairam/CovariateAnalysis@dev
+VignetteBuilder:
+    knitr

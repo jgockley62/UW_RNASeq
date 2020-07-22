@@ -1,0 +1,81 @@
+default:
+  counts:
+    synID: syn22084837
+    version:
+    gene id: feature
+  metadata:
+    synID: syn22090070
+    version: 1
+    sample id:
+  biomart:
+    synID: syn21907998
+    version:
+    gene id: ensembl_gene_id
+    filters: ensembl_gene_id
+    host: ensembl.org
+    organism: hsa
+  factors:
+  continuous:
+  conditions: diagnosis, sex
+mayo:
+  counts:
+    synID: syn21587392
+    version: 2
+    gene id: feature
+  metadata:
+    synID: syn21587404
+    version: 4
+    sample id: sampleid
+  biomart:
+    synID:
+    version:
+    gene id: ensembl_gene_id
+    filters: ensembl_gene_id
+    host: ensembl.org # Ensembl Release 99 (January 2020)
+    organism: hsa
+  factors: [ "donorid", "sampleid", "source", "sex", "flowcell", "diagnosis", "source_tissue_diagnosis", "tissue_diagnosis", "tissue_APOE4" ]
+  continuous: [ "rin", "rin2", "age_death", "pct_pf_reads_aligned",
+                "pct_coding_bases", "pct_intergenic_bases", "pct_intronic_bases",
+                "pct_ribosomal_bases" ] #pmi missing at the moment
+ihab:
+  counts:
+    synID: syn21969017
+    version: 1
+    gene id: feature
+  metadata:
+    synID: syn21822937
+    version: 1
+    sample id: individualID
+  biomart:
+    synID: syn21983044
+    version: 1
+    gene id: ensembl_gene_id
+  factors: [ "sex", "race", "yearsEducation", "diagnosis", "AlignmentSummaryMetrics__CATEGORY" ]
+  continuous: [ "age",	"weight",	"height", "mocatotal",
+  "AlignmentSummaryMetrics__PF_READS_ALIGNED",
+  "AlignmentSummaryMetrics__TOTAL_READS",	"RnaSeqMetrics__INTERGENIC_BASES",
+  "RnaSeqMetrics__INTRONIC_BASES", "RnaSeqMetrics__PCT_CODING_BASES",
+  "RnaSeqMetrics__PCT_INTERGENIC_BASES", "RnaSeqMetrics__PCT_INTRONIC_BASES",
+  "RnaSeqMetrics__PCT_RIBOSOMAL_BASES" ]
+UW:
+  counts:
+    synID: syn22249653
+    version: 1
+    gene id: feature
+  metadata:
+    synID: syn22254834
+    version: 1
+    sample id: sampleID
+  biomart: 
+    synID: syn22254975
+    version: 2
+    gene id: ensembl_gene_id
+  factors: [ "sampleID", "individualID", "disease_cohort", 'sex', "ind_mut_status", "apoeGenotype", "ind_mutation", "ADAD_fam_mut", "CDR" ]
+  continuous: [ "age", "RIN",
+  "AlignmentSummaryMetrics__PF_READS_ALIGNED",
+  "AlignmentSummaryMetrics__TOTAL_READS",	"RnaSeqMetrics__INTERGENIC_BASES",
+  "RnaSeqMetrics__INTRONIC_BASES", "RnaSeqMetrics__PCT_CODING_BASES",
+  "RnaSeqMetrics__PCT_INTERGENIC_BASES", "RnaSeqMetrics__PCT_INTRONIC_BASES",
+  "RnaSeqMetrics__PCT_RIBOSOMAL_BASES" ]
+
+  
