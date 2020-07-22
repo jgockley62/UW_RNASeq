@@ -555,7 +555,7 @@ Interpretation of Mutation Status
 9. NA: No Mutation Status Available (These are mostly controls)
 
 Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp1, fig.height=6, fig.width=18, cache=FALSE}
+```{r diff.exp2, fig.height=6, fig.width=18, cache=FALSE}
 #Remove NAs (The Control samples don't have mutation status)
 METADATA_Use <- METADATA
 METADATA_Use$ind_mut_status <- addNA(METADATA_Use$ind_mut_status)
@@ -623,7 +623,7 @@ Interpretation of Mutation Status
 9. NA: No Mutation Status Available (These are mostly controls)
 
 Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp1, fig.height=6, fig.width=18, cache=FALSE}
+```{r diff.exp3, fig.height=6, fig.width=18, cache=FALSE}
 #Remove NAs (The Control samples don't have mutation status)
 METADATA_Use <- METADATA
 METADATA_Use$ind_mutation <- addNA(METADATA_Use$ind_mutation)
@@ -712,7 +712,7 @@ Interpretation of Mutation Status
 
 
 Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp1, fig.height=6, fig.width=18, cache=FALSE}
+```{r diff.exp4, fig.height=6, fig.width=18, cache=FALSE}
 #Remove NAs (The Control samples don't have mutation status)
 METADATA_Use <- METADATA
 
@@ -774,7 +774,7 @@ Interpretation of Diagnosis
 2. Sporatic: Sporatic AD Risk
 
 Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp1, fig.height=6, fig.width=18, cache=FALSE}
+```{r diff.exp5, fig.height=6, fig.width=18, cache=FALSE}
 #Remove NAs (The Control samples don't have mutation status)
 METADATA_Use <- METADATA
 METADATA_Use$disease_cohort <- as.character(METADATA_Use$disease_cohort)
@@ -934,6 +934,4 @@ source("~/UW_RNASeq/utility_functions/hook_synapseMdSyntax_plot.R")
 source("~/UW_RNASeq/utility_functions/knitfile2synapse.R")
 
 synapser::synLogin()
-createAndKnitToFolderEntity(file = "UW_Plan.Rmd",
-                                    parentId ="syn22257765",
-                                    folderName = 'RNASeq')
+createAndKnitToFolderEntity(file = "UW_Plan.Rmd",  parentId ="syn22257765", folderName = 'RNASeq')
