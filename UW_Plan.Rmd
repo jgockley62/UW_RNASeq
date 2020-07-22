@@ -495,7 +495,7 @@ Interpretation of Diagnosis
 2. Sporatic: Sporatic AD Risk
 
 Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp1, fig.height=6, fig.width=18, cache=FALSE}
+```{r diff.exp0, fig.height=6, fig.width=18, cache=FALSE}
 # Get design matrix
 DESIGN = getDesignMatrix(METADATA[, c(primaryVariable[1], postAdjustCovars), drop = F], Intercept = F)
 DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
