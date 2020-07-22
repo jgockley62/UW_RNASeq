@@ -849,8 +849,8 @@ activityDescription = 'Preliminary Differential expression Analysis'
 
 thisFileName <- 'UW_Plan.Rmd'
 # Github link
-thisRepo <- githubr::getRepo(repository = "jgockley62/", ref="branch", refName='master')
-thisFile <- githubr::getPermlink(repository = thisRepo, repositoryPath=paste0('code/',thisFileName))
+thisRepo <- githubr::getRepo(repository = "jgockley62/UW_RNASeq", ref="branch", refName='master')
+thisFile <- githubr::getPermlink(repository = thisRepo, repositoryPath=paste0(thisFileName))
 ```
 
 ### Store files in synapse
@@ -877,34 +877,52 @@ all.annotations = list(
   genomeAssemblyID = 'GRCh38'
 )
 # Store differential expression results
-
 rbindlist(all.diff.exp, use.names = T, fill = T, idcol = 'Model') %>%
-  write.table(file = 'UW_DiffExpression.tsv', sep = '\t', row.names=F, quote=F)
-DEXP_OBJ = File('UW_DiffExpression.tsv', 
+  write.table(file = 'outs/UW_DiffExpression.tsv', sep = '\t', row.names=F, quote=F)
+DEXP_OBJ = File('outs/UW_DiffExpression.tsv', 
                 name = 'Differential Expression Results',
-                activityDescription = activityDescription,
-                activityName = activityName,
-                parentId = CODE$properties$id, 
-                used=used, executed=thisFileName)
+                parentId = CODE$properties$id )
 all.annotations$annotations$dataSubType = 'diffExp'
-annotations(DEXP_OBJ) = all.annotations
-DEXP_OBJ = synStore(DEXP_OBJ, activity = synGetActivity(CODE$properties$id))
+DEXP_OBJ$annotations = all.annotations
+DEXP_OBJ = synStore(DEXP_OBJ, used = used, activityName = activityName, executed = thisFile, activityDescription = activityDescription  )
 
 # Store all differential expression models
-save(all.fit, file = 'UW_Models.RData')
-FIT_OBJ = File('UW_Models.RData', 
+save(all.fit, file = 'outs/UW_Models.RData')
+FIT_OBJ = File('outs/UW_Models.RData', 
                name = 'All Limma Models',
-               activityDescription = activityDescription,
-               activityName = activityName,
-               parentId = CODE$properties$id, 
-               used = used, 
-               executed=thisFileName)
+               parentId = CODE$properties$id
+               )
 
 all.annotations$annotations$dataSubType = 'modelFits'
 all.annotations$annotations$fileFormat = 'RData'
-annotations(FIT_OBJ) = all.annotations
-FIT_OBJ = synStore(FIT_OBJ, activity = synGetActivity(CODE$properties$id))
+FIT_OBJ$annotations = all.annotations
+FIT_OBJ = synStore(FIT_OBJ, used = used, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
 
+# Store filtered counts
+filtered_counts %>%
+  rownameToFirstColumn('ensembl_gene_id') %>%
+  write.table(file = 'outs/UW_Filtered_Counts.tsv', sep = '\t', row.names=F, quote=F)
+ENRICH_OBJ <-  File( path='outs/UW_Filtered_Counts.tsv', name = 'Counts (filtered raw)', parentId=CODE$properties$id ) 
+  all.annotations$dataSubType = 'filteredCounts'
+  synStore(ENRICH_OBJ, annotations = all.annotations, used = used, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
+
+# Store Estimated counts
+NEW.COUNTS %>%
+  rownameToFirstColumn('ensembl_gene_id') %>%
+  write.table(file = 'outs/UW_eCounts.tsv', sep = '\t', row.names=F, quote=F)
+ENRICH_OBJ <-  File( path='outs/UW_eCounts.tsv', name = 'Counts (estimated)', parentId=CODE$properties$id )
+  all.annotations$dataSubType = 'estimatedCounts'
+  ENRICH_OBJ$annotations = all.annotations
+synStore( ENRICH_OBJ, used = used, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
+
+# Store residual gene expression for network analysis
+RESIDUAL.NET.GENE_EXPRESSION %>%
+  rownameToFirstColumn('ensembl_gene_id') %>%
+  write.table(file = 'outs/UW_netResidualExpression.tsv', sep = '\t', row.names=F, quote=F)
+ENRICH_OBJ <- File( path='outs/UW_netResidualExpression.tsv', name = 'Normalised, covariates and Diagnosis removed residual expression (for network analysis)', parentId=CODE$properties$id )
+  all.annotations$dataSubType = 'residualGeneExpForNetAnlz'
+  ENRICH_OBJ$annotations = all.annotations
+synStore( ENRICH_OBJ, used = used, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
 
 ```
 
