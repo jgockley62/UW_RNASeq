@@ -3,25 +3,21 @@ title: "UW-RNASeq"
 output: html_document
 ---
 
-```{r setup, include = FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  eval = FALSE
-)
-```
+
 
 1. [Write your own config file](https://kelshmo.github.io/sageseqr/articles/customize-config.html).
 
 2. Specify the active configuration by setting `R_CONFIG_ACTIVE`.
 
-```{r config-setup}
+
+```r
 Sys.setenv(R_CONFIG_ACTIVE = "UW")
 ```
 
 3. Load the `sageseqr` library and login to [Synapse](https://www.synapse.org/). `rnaseq_plan()` calls the arguments from the config file and creates the `drake` plan. Execute `drake::make(plan)` to compute. Run this code from your project root.
 
-```{r run-plan}
+
+```r
 #library(devtools)
 #devtools::install_git('https://github.com/kelshmo/sageseqr.git')
 #devtools::install_github('th1vairam/CovariateAnalysis@dev')
@@ -108,7 +104,8 @@ cqn_counts <- sageseqr::cqn(filtered_counts, biomart_results)
 
 ### Sex Chromosome-specific Gene Expression Patterns
 
-```{r Reported_Gender_plots, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 COUNT <- as.data.frame( counts )
 COUNT$ensembl_gene_id <- do.call(rbind, strsplit(row.names(COUNT), '\\.'))[,1]
 COUNT <- COUNT[ grepl('ENSG', row.names(COUNT)), ]
@@ -195,7 +192,8 @@ clean_md$Infered.Sex <- as.factor(clean_md$Infered.Sex)
 
 ### Sample clustering
 PCA based clustering of samples
-```{r decompse.normalise.data, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 # Find principal components of expression to plot
 cqn_counts$E.no.na <- cqn_counts$E
 METADATA <- clean_md[ , colnames(clean_md)[colnames(clean_md) != 'sex'] ]
@@ -216,7 +214,8 @@ p
 ```
 
 Tree based clustering of samples
-```{r decompse.normalise.data.1, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 # Eucledian tree based analysis
 COVARIATES.tmp = data.matrix(METADATA[,c( 'individualID', "sex", "apoeGenotype", "disease_cohort", 'ADAD_fam_mut', "ind_mut_status", "ind_mutation")])
 COVARIATES.tmp[is.na(COVARIATES.tmp)] = 0
@@ -231,7 +230,8 @@ WGCNA::plotDendroAndColors(tree,
 ```
 
 ### Distribution of samples (log cpm)
-```{r lcpm.dist, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 # Plot abberent distribution of logcpm counts
 tmp1 = cqn_counts$E %>%
   rownameToFirstColumn('Gene.ID') %>%
@@ -244,7 +244,8 @@ p
 ```
 
 Coexpression of genes 
-```{r coexp1, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 cr = cor(t(cqn_counts$E.no.na))
 hist(cr, main = 'Distribution of correlation between genes', xlab = 'Correlation')
 ```
@@ -252,7 +253,8 @@ hist(cr, main = 'Distribution of correlation between genes', xlab = 'Correlation
 
 ### Significant Covariates
 Correlation between pca of unadjusted mRNA expression and covariates are used to find significant covariates
-```{r preadj.covariates, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 # Find correlation between PC's of gene expression with covariates
 cqn_counts$E = cqn_counts$E[,row.names(clean_md)]
 cqn_counts$E.no.na = cqn_counts$E[,row.names(clean_md)]
@@ -319,7 +321,8 @@ Since many covariates are correlated, re-normalising and re-adjusting COUNTS wit
 1. Adding Batch and Sex a priori to variable selection
 2. Primary variable of interest Diagnosis is excluded from the pool of available covariates for selection
 
-```{r iterative.norm, results='asis'}
+
+```r
 # Primary variable of interest
 #RIN, Sex, disease_cohort, RnaSeqMetrics__PCT_CODING_BASES, RnaSeqMetrics__PCT_INTERGENIC_BASES, RnaSeqMetrics__INTRONIC_BASES, RnaSeqMetrics__PCT_INTRONIC_BASES
 # Ind Mut Status: Yes PC11
@@ -424,7 +427,8 @@ tmp <- paste('Using following covariates in the final model:', modelStr)
 ```
 
 ### Sanity check
-```{r residual.adj, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 # Find PC of residual gene expression and significant covariates that are highly correlated with PCs
 residualSigCovars = runPCAandPlotCorrelations(expr, 
                                               METADATA,
@@ -433,12 +437,14 @@ residualSigCovars = runPCAandPlotCorrelations(expr,
 residualSigCovars[["PC_res"]][[2]]$plotData
 ```
 Coexpression of genes 
-```{r coexp2, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 cr = cor(t(expr))
 hist(cr, main = 'Distribution of correlation between genes', xlab = 'Correlation')
 ```
 PCA of residual data
-```{r decompse.normalise.data2.1, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 # Find principal components of expression to plot
 PC <- prcomp(expr, scale.=T, center = T)
 # Plot first 4 PCs
@@ -452,7 +458,8 @@ p <- p + theme_bw() + theme(legend.position="right")
 p
 ```
 Tree based clustering of residual data
-```{r decompse.normalise.data2.2, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 # Eucledian tree based analysis
 COVARIATES.tmp = data.matrix(METADATA[,c( 'individualID', "sex", "apoeGenotype", "disease_cohort", 'ADAD_fam_mut', "ind_mut_status", "ind_mutation")])
 COVARIATES.tmp[is.na(COVARIATES.tmp)] = 0
@@ -468,7 +475,8 @@ WGCNA::plotDendroAndColors(tree,
 
 ### Adjust data with covariates for Network Analysis
 Identified covariates are regressed out from the expression matrix for network analysis
-```{r network.adjust}
+
+```r
 # Get design matrix
 DESIGN.NET = getDesignMatrix(METADATA[, postAdjustCovars, drop = F], Intercept = F)
 DESIGN.NET = DESIGN.NET$design[,linColumnFinder(DESIGN.NET$design)$indepCols]
@@ -495,7 +503,8 @@ Interpretation of Diagnosis
 2. Sporatic: Sporatic AD Risk
 
 Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp0, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 # Get design matrix
 DESIGN = getDesignMatrix(METADATA[, c(primaryVariable[1], postAdjustCovars), drop = F], Intercept = F)
 DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
@@ -555,7 +564,8 @@ Interpretation of Mutation Status
 9. NA: No Mutation Status Available (These are mostly controls)
 
 Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp2, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 #Remove NAs (The Control samples don't have mutation status)
 METADATA_Use <- METADATA
 METADATA_Use$ind_mut_status <- addNA(METADATA_Use$ind_mut_status)
@@ -623,7 +633,8 @@ Interpretation of Mutation Status
 9. NA: No Mutation Status Available (These are mostly controls)
 
 Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp3, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 #Remove NAs (The Control samples don't have mutation status)
 METADATA_Use <- METADATA
 METADATA_Use$ind_mutation <- addNA(METADATA_Use$ind_mutation)
@@ -712,7 +723,8 @@ Interpretation of Mutation Status
 
 
 Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp4, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 #Remove NAs (The Control samples don't have mutation status)
 METADATA_Use <- METADATA
 
@@ -774,7 +786,8 @@ Interpretation of Diagnosis
 2. Sporatic: Sporatic AD Risk
 
 Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp5, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+
+```r
 #Remove NAs (The Control samples don't have mutation status)
 METADATA_Use <- METADATA
 METADATA_Use$disease_cohort <- as.character(METADATA_Use$disease_cohort)
@@ -838,96 +851,6 @@ all.fit = c(all.fit, list(AD_Cohort.Sex = FIT))
 ```
 
 ### Store files in synapse
-```{r synapse.store, include=FALSE, eval=TRUE, cache=TRUE}
-parentId ="syn22257765"
-folderName = 'RNASeq'
-CODE <- synapser::Folder(name = folderName, parentId = parentId)
-CODE <- synapser::synStore(CODE)
 
-activityName = 'Preliminary DE'
-activityDescription = 'Preliminary Differential expression Analysis'
 
-thisFileName <- 'UW_Plan.Rmd'
-# Github link
-thisRepo <- githubr::getRepo(repository = "jgockley62/UW_RNASeq", ref="branch", refName='master')
-thisFile <- githubr::getPermlink(repository = thisRepo, repositoryPath=paste0(thisFileName))
-#Set Used SynIDs For Provenance
-used <- c( paste0( config::get("metadata")$synID, '.', config::get("metadata")$version),
-           paste0( config::get("counts")$synID, '.', config::get("counts")$version ), 
-           paste0( config::get("biomart")$synID, '.', config::get("biomart")$version)
-)
 
-# Set annotations
-all.annotations = list(
-  dataType = 'mRNA',
-  dataSubType = 'geneExp',
-  summaryLevel = 'gene',
-  assay	 = 'RNAseq',
-  tissueTypeAbrv	= 'UW', 
-  study = 'UW', 
-  organism = 'HomoSapiens',
-  consortium	= 'UW',
-  normalizationStatus	= TRUE,
-  normalizationType	= 'CQN',
-  rnaquantification = 'RSEM',
-  genomeAssemblyID = 'GRCh38'
-)
-# Store differential expression results
-rbindlist(all.diff.exp, use.names = T, fill = T, idcol = 'Model') %>%
-  write.table(file = 'outs/UW_DiffExpression.tsv', sep = '\t', row.names=F, quote=F)
-DEXP_OBJ = File('outs/UW_DiffExpression.tsv', 
-                name = 'Differential Expression Results',
-                parentId = CODE$properties$id )
-all.annotations$annotations$dataSubType = 'diffExp'
-DEXP_OBJ$annotations = all.annotations
-DEXP_OBJ = synStore(DEXP_OBJ, used = used, activityName = activityName, executed = thisFile, activityDescription = activityDescription  )
-
-# Store all differential expression models
-save(all.fit, file = 'outs/UW_Models.RData')
-FIT_OBJ = File('outs/UW_Models.RData', 
-               name = 'All Limma Models',
-               parentId = CODE$properties$id
-               )
-
-all.annotations$annotations$dataSubType = 'modelFits'
-all.annotations$annotations$fileFormat = 'RData'
-FIT_OBJ$annotations = all.annotations
-FIT_OBJ = synStore(FIT_OBJ, used = used, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
-
-# Store filtered counts
-filtered_counts %>%
-  rownameToFirstColumn('ensembl_gene_id') %>%
-  write.table(file = 'outs/UW_Filtered_Counts.tsv', sep = '\t', row.names=F, quote=F)
-ENRICH_OBJ <-  File( path='outs/UW_Filtered_Counts.tsv', name = 'Counts (filtered raw)', parentId=CODE$properties$id ) 
-  all.annotations$dataSubType = 'filteredCounts'
-  synStore(ENRICH_OBJ, annotations = all.annotations, used = used, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
-
-# Store Estimated counts
-NEW.COUNTS %>%
-  rownameToFirstColumn('ensembl_gene_id') %>%
-  write.table(file = 'outs/UW_eCounts.tsv', sep = '\t', row.names=F, quote=F)
-ENRICH_OBJ <-  File( path='outs/UW_eCounts.tsv', name = 'Counts (estimated)', parentId=CODE$properties$id )
-  all.annotations$dataSubType = 'estimatedCounts'
-  ENRICH_OBJ$annotations = all.annotations
-synStore( ENRICH_OBJ, used = used, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
-
-# Store residual gene expression for network analysis
-RESIDUAL.NET.GENE_EXPRESSION %>%
-  rownameToFirstColumn('ensembl_gene_id') %>%
-  write.table(file = 'outs/UW_netResidualExpression.tsv', sep = '\t', row.names=F, quote=F)
-ENRICH_OBJ <- File( path='outs/UW_netResidualExpression.tsv', name = 'Normalised, covariates and Diagnosis removed residual expression (for network analysis)', parentId=CODE$properties$id )
-  all.annotations$dataSubType = 'residualGeneExpForNetAnlz'
-  ENRICH_OBJ$annotations = all.annotations
-synStore( ENRICH_OBJ, used = used, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
-
-```
-
-```{r knitmd, eval=FALSE, cache=FALSE, include=FALSE}
-library(synapser)
-library(knit2synapse) # get the package from devtools::install_github('Sage-Bionetworks/knit2synapse')
-source("~/UW_RNASeq/utility_functions/knitfile2synapseClient.R")
-source("~/UW_RNASeq/utility_functions/hook_synapseMdSyntax_plot.R")
-source("~/UW_RNASeq/utility_functions/knitfile2synapse.R")
-setwd("~/UW_RNASeq/")
-synapser::synLogin()
-createAndKnitToFolderEntity(file = "UW_Plan.Rmd",  parentId ="syn22257765", folderName = 'RNASeq')
