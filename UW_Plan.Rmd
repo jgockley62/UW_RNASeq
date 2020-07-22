@@ -929,9 +929,9 @@ synStore( ENRICH_OBJ, used = used, activityName = activityName, executed = thisF
 ```{r knitmd, eval=FALSE, cache=FALSE, include=FALSE}
 library(synapser)
 library(knit2synapse) # get the package from devtools::install_github('Sage-Bionetworks/knit2synapse')
-source("~/sageseqr/utility_functions/knitfile2synapseClient.R")
-source("~/sageseqr/utility_functions/hook_synapseMdSyntax_plot.R")
-source("~/sageseqr/utility_functions/knitfile2synapse.R")
+source("~/UW_RNASeq/utility_functions/knitfile2synapseClient.R")
+source("~/UW_RNASeq/utility_functions/hook_synapseMdSyntax_plot.R")
+source("~/UW_RNASeq/utility_functions/knitfile2synapse.R")
 
 synapser::synLogin()
 createAndKnitToFolderEntity(file = "UW_Plan.Rmd",
