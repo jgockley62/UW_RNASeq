@@ -929,6 +929,87 @@ all.diff.exp = c(all.diff.exp, list(AD_Cohort.Sex = DE))
 all.fit = c(all.fit, list(AD_Cohort.Sex = FIT))
 ```
 
+### Differential expression analysis ( with FAD_NoMut+HC versus Sporatic (Non-PSEN1) )
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+
+0. Control: FAD_NoMut or HC
+1. Cases: Sporatic AD (Non-PSEN1) 
+9. Other Samples
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+```{r diff.exp7, cache=FALSE, fig.height=6, fig.width=8, results='asis'}
+#Remove NAs (The Control samples don't have mutation status)
+METADATA_Use <- METADATA
+METADATA_Use$ind_mut_status <- as.character(METADATA_Use$ind_mut_status)
+METADATA_Use$ind_mut_status[ is.na(METADATA_Use$ind_mut_status) ] <- 9
+METADATA_Use$ind_mutation <- as.character(METADATA_Use$ind_mutation)
+METADATA_Use$ind_mutation[ is.na(METADATA_Use$ind_mutation) ] <- 9
+
+METADATA_Use$FADNoMut_HC_vs_SporaticNoPSEN1 <- 9
+#HC
+METADATA_Use[ METADATA_Use$disease_cohort == 0, ]$FADNoMut_HC_vs_SporaticNoPSEN1 <- 0
+#FAD Controls
+METADATA_Use[ METADATA_Use$disease_cohort == 1 & METADATA_Use$ind_mut_status == 0, ]$FADNoMut_HC_vs_SporaticNoPSEN1 <- 0
+#Cases
+METADATA_Use[ METADATA_Use$disease_cohort == 1 & METADATA_Use$ind_mutation %in% c('2','3','4'), ]$FADNoMut_HC_vs_SporaticNoPSEN1 <- 1
+
+
+METADATA_Use$FADNoMut_HC_vs_SporaticNoPSEN1 <- as.factor(METADATA_Use$FADNoMut_HC_vs_SporaticNoPSEN1)
+METADATA_Use$ind_mutation <- as.factor(METADATA_Use$ind_mutation)
+METADATA_Use$ind_mut_status <- as.factor(METADATA_Use$ind_mut_status)
+
+# Get design matrix
+DESIGN = getDesignMatrix(METADATA_Use[, c('FADNoMut_HC_vs_SporaticNoPSEN1', postAdjustCovars ), drop = F], Intercept = F)
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+colnames(DESIGN$design) = gsub('FADNoMut_HC_vs_SporaticNoPSEN1',"Comp",colnames(DESIGN$design))
+# Estimate voom weights for dispersion control
+VOOM.WEIGHTS = voom(cnts, design=DESIGN$design, plot=F)
+# Fit linear model using new weights and new design
+FIT = lmFit(cqn_counts$E,
+            design = DESIGN$design,
+            weights = VOOM.WEIGHTS$weights)
+# Fit contrast
+contrast = makeContrasts( 
+  contrasts=c(
+              "Comp0-Comp1"),
+                         levels = colnames(FIT$coefficients))
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = c('FADNoMut_HC-SporaticNoPSEN1')
+DE = DE %>% 
+  rbindlist(idcol = 'Comparison') %>%
+  left_join(biomart_results %>%
+              dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gene_gc_content, gene_length) %>%
+              unique()) %>%
+  dplyr::mutate(Study = 'UW',
+                Direction = logFC/abs(logFC),
+                Direction = factor(Direction, c(-1,1), c('-1' = 'DOWN', '1' = 'UP')),
+                Direction = as.character(Direction))
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+writeLines('Differentially expressed genes at an FDR 0.05 and logFC 1.2')
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Comparison, Direction) %>%
+  group_by(Comparison, Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+p = ggplot(DE, aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
+p = p + scale_color_manual(values = c('grey', 'green','red'))
+p = p + facet_grid(.~Comparison, scales = 'fixed')
+p
+all.diff.exp = c(all.diff.exp, list( FADNoMut_HC_vs_SporaticNoPSEN1 = DE))
+all.fit = c(all.fit, list( FADNoMut_HC_vs_SporaticNoPSEN1 = FIT))
+```
+
+
+
+
 ### Store files in synapse
 ```{r synapse.store, include=FALSE, eval=TRUE, cache=TRUE}
 parentId ="syn22257765"
