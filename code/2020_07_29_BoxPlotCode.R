@@ -71,7 +71,6 @@ thisFile <- githubr::getPermlink(repository = thisRepo, repositoryPath=paste0(th
 #Need to push covariates to synapse to automate above metadata parts and then add to provenance
 used <- c( 'syn22269112' )
 
-
 # Set annotations
 all.annotations = list(
   dataType = 'mRNA',
@@ -87,4 +86,9 @@ all.annotations = list(
   rnaquantification = 'RSEM',
   genomeAssemblyID = 'GRCh38'
 )
+
+ENRICH_OBJ <- File( path='outs/SelectGeneBoxPlot.pdf', name = 'Gene Expression Boxplots', parentId=CODE$properties$id )
+all.annotations$dataSubType = 'PDF plot object'
+ENRICH_OBJ$annotations = all.annotations
+synStore( ENRICH_OBJ, used = used, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
 
