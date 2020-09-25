@@ -305,6 +305,9 @@ preAdjustedSigCovars[["PC_res"]][[2]]$plotData
 writeLines("Iterate across covariates with missingness to attempt to find association:")
 for( focus in 1:length(Iters)){
   Meta_HeatMap_t <- METADATA
+  
+  Meta_HeatMap_t$individualID <- as.factor(Meta_HeatMap_t$individualID)
+  
   Meta_HeatMap_t$sampleID <- row.names(METADATA)
   Meta_HeatMap_t <- Meta_HeatMap_t[ !is.na(Meta_HeatMap_t[,Iters[focus] ]), ]
   exp <- cqn_counts$E.no.na[,Meta_HeatMap_t$sampleID]
