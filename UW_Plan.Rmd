@@ -28,7 +28,7 @@ Sys.setenv(R_CONFIG_ACTIVE = "UW")
 
 3. Load the `sageseqr` library and login to [Synapse](https://www.synapse.org/). `rnaseq_plan()` calls the arguments from the config file and creates the `drake` plan. Execute `drake::make(plan)` to compute. Run this code from your project root.
 
-```{r run-plan, eval=TRUE}
+```{r run-plan, eval=TRUE, echo=FALSE, message=FALSE, results='hide'}
 #library(devtools)
 #devtools::install_git('https://github.com/kelshmo/sageseqr.git')
 #devtools::install_github('th1vairam/CovariateAnalysis@dev')
@@ -60,26 +60,34 @@ Sys.setenv(R_CONFIG_ACTIVE = "UW")
 # make_cache
 
 # Run the analysis
-plan <- sageseqr::rnaseq_plan(metadata_id = config::get("metadata")$synID,
-                    metadata_version = config::get("metadata")$version,
-                    counts_id = config::get("counts")$synID,
-                    counts_version = config::get("counts")$version,
-                    gene_id_input = config::get("counts")$`gene id`,
-                    sample_id_input='individualID',
-                    factor_input = config::get("factors"),
-                    continuous_input = config::get("continuous"),
-                    gene_id = config::get("biomart")$`gene id`,
-                    biomart_id = config::get("biomart")$synID,
-                    biomart_version = config::get("biomart")$version,
-                    filters = config::get("biomart")$filters,
-                    host = config::get("biomart")$host,
-                    organism = config::get("biomart")$organism, 
-                    conditions = config::get("conditions")
-)
-import_metadata <- sageseqr::get_data("syn22254834", 1L)
-import_metadata$sample <- paste0( 'S', import_metadata$sample)
-import_metadata$sampleID <- paste0( 'S', import_metadata$sampleID)
+
+#plan <- sageseqr::rnaseq_plan(metadata_id = config::get("metadata")$synID,
+#                    metadata_version = config::get("metadata")$version,
+#                    counts_id = config::get("counts")$synID,
+#                    counts_version = config::get("counts")$version,
+#                    gene_id_input = config::get("counts")$`gene id`,
+#                    sample_id_input='individualID',
+#                    factor_input = config::get("factors"),
+#                    continuous_input = config::get("continuous"),
+#                    gene_id = config::get("biomart")$`gene id`,
+#                    biomart_id = config::get("biomart")$synID,
+#                    biomart_version = config::get("biomart")$version,
+#                    filters = config::get("biomart")$filters,
+#                    host = config::get("biomart")$host,
+#                    organism = config::get("biomart")$organism, 
+#                    conditions = config::get("conditions")
+#)
+import_metadata <- sageseqr::get_data("syn22254834", 8L)
+import_metadata$sample <- paste0( 'S', import_metadata$specimenID)
+import_metadata$sampleID <- paste0( 'S', import_metadata$specimenID)
 import_metadata$individualID <- paste0( 'I', import_metadata$individualID)
+import_metadata$Family_ID <- paste0( 'F', import_metadata$individualID)
+
+import_metadata$totalID <- paste0( import_metadata$individualID, "_", import_metadata$Family_ID )
+
+#trans<-c(1,0)
+#names(trans)<-c('female','male')
+#import_metadata$sex <- trans[import_metadata$sex]
 
 import_counts <- sageseqr::get_data("syn22249653", 1L)
 
@@ -88,11 +96,17 @@ colnames( counts ) <- counts[ 'feature', ]
 counts <- counts[ row.names(counts) != 'feature', ]
 colnames(counts) <- paste0( 'S', colnames(counts) )
 
-import_metadata <- import_metadata[,c("sampleID", "individualID", "disease_cohort", 'sex', "ind_mut_status", "apoeGenotype", "ind_mutation", "ADAD_fam_mut", "CDR", "age", "RIN", "AlignmentSummaryMetrics__PF_READS_ALIGNED", "AlignmentSummaryMetrics__TOTAL_READS",	"RnaSeqMetrics__INTERGENIC_BASES", "RnaSeqMetrics__INTRONIC_BASES", "RnaSeqMetrics__PCT_CODING_BASES", "RnaSeqMetrics__PCT_INTERGENIC_BASES", "RnaSeqMetrics__PCT_INTRONIC_BASES", "RnaSeqMetrics__PCT_RIBOSOMAL_BASES")]
+import_metadata <- import_metadata[,c("sampleID", "totalID", "individualID", "Family_ID", "disease_cohort", 'sex', "ind_mut_status", "apoeGenotype", "ind_mutation", "ADAD_fam_mut", "CDR", "age", "RIN", "AlignmentSummaryMetrics__PF_READS_ALIGNED", "AlignmentSummaryMetrics__TOTAL_READS",	"RnaSeqMetrics__INTERGENIC_BASES", "RnaSeqMetrics__INTRONIC_BASES", "RnaSeqMetrics__PCT_CODING_BASES", "RnaSeqMetrics__PCT_INTERGENIC_BASES", "RnaSeqMetrics__PCT_INTRONIC_BASES", "RnaSeqMetrics__PCT_RIBOSOMAL_BASES")]
 
+#clean_md <- sageseqr::clean_covariates(md = import_metadata, factors = c("sampleID", "individualID", "Family_ID", "disease_cohort", 'sex', "ind_mut_status", "apoeGenotype", "ind_mutation", "ADAD_fam_mut", "CDR" ), sample_identifier= "sampleID", continuous = c("age", "RIN",
+#  "AlignmentSummaryMetrics__PF_READS_ALIGNED",
+#  "AlignmentSummaryMetrics__TOTAL_READS",	"RnaSeqMetrics__INTERGENIC_BASES",
+#  "RnaSeqMetrics__INTRONIC_BASES", "RnaSeqMetrics__PCT_CODING_BASES",
+#  "RnaSeqMetrics__PCT_INTERGENIC_BASES", "RnaSeqMetrics__PCT_INTRONIC_BASES",
+#  "RnaSeqMetrics__PCT_RIBOSOMAL_BASES"
+#))
 
-
-clean_md <- sageseqr::clean_covariates(md = import_metadata, factors = c("sampleID", "individualID", "disease_cohort", 'sex', "ind_mut_status", "apoeGenotype", "ind_mutation", "ADAD_fam_mut", "CDR" ), sample_identifier= "sampleID", continuous = c("age", "RIN",
+clean_md <- sageseqr::clean_covariates(md = import_metadata, factors = c("sampleID", "totalID", "disease_cohort", 'sex', "ind_mut_status", "apoeGenotype", "ind_mutation", "ADAD_fam_mut", "CDR" ), sample_identifier= "sampleID", continuous = c("age", "RIN",
   "AlignmentSummaryMetrics__PF_READS_ALIGNED",
   "AlignmentSummaryMetrics__TOTAL_READS",	"RnaSeqMetrics__INTERGENIC_BASES",
   "RnaSeqMetrics__INTRONIC_BASES", "RnaSeqMetrics__PCT_CODING_BASES",
@@ -114,7 +128,7 @@ cqn_counts <- sageseqr::cqn(filtered_counts, biomart_results)
 ```
 
 ### Sex Chromosome-specific Gene Expression Patterns
-
+Cohort Sex check based on the sex specific transcripts UTY and XIST. Sample 19 was not designated male or female and is infered to be female based on no UTY expression and high XIST expression
 ```{r Reported_Gender_plots, cache=FALSE, fig.height=6, fig.width=8, results='asis', eval=TRUE}
 COUNT <- as.data.frame( counts )
 COUNT$ensembl_gene_id <- do.call(rbind, strsplit(row.names(COUNT), '\\.'))[,1]
@@ -184,11 +198,11 @@ if( T %in%  is.na(REPORTED.GENDER.COUNTS$`Reported Gender`) ){
   import_metadata$Infered.Sex <- import_metadata$sex 
   if( length(Males) > 0 ){
     writeLines( paste0( 'Inferred Male Induviduals: ', paste0(Males,collapse =', ') ))
-    import_metadata[ import_metadata$sampleID %in% Males, ]$Infered.Sex <- "male"
+    import_metadata[ import_metadata$sampleID %in% Males, ]$Infered.Sex <- "male" #0
   }else{ writeLines( 'Inferred Male Induviduals: NA') }
   if( length(Females) > 0 ){
     writeLines( paste0( 'Inferred Female Induviduals: ', paste0(Females,collapse =', ') ))
-    import_metadata[ import_metadata$sampleID %in% Females, ]$Infered.Sex <- "female"
+    import_metadata[ import_metadata$sampleID %in% Females, ]$Infered.Sex <- "female" #1
   }else{ writeLines( 'Inferred Female Induviduals: NA') }
   
   clean_md$Infered.Sex <- import_metadata$Infered.Sex
@@ -201,7 +215,7 @@ clean_md$Infered.Sex <- as.factor(clean_md$Infered.Sex)
 ```
 
 ### Sample clustering
-PCA based clustering of samples
+PCA based clustering of samples before regressing out confounding variables. Health controls are masked beause they have no APOE status
 ```{r decompse.normalise.data, cache=FALSE, fig.height=6, fig.width=8, results='asis', eval=TRUE}
 # Find principal components of expression to plot
 cqn_counts$E.no.na <- cqn_counts$E
@@ -222,10 +236,12 @@ p <- p + theme_bw() + theme(legend.position="right")
 p
 ```
 
-Tree based clustering of samples
+### Clustering of Samples
+Tree based clustering of samples before regressing out confounding variables
 ```{r decompse.normalise.data.1, cache=FALSE, fig.height=6, fig.width=8, results='asis', eval=TRUE}
 # Eucledian tree based analysis
-COVARIATES.tmp = data.matrix(METADATA[,c( 'individualID', "sex", "apoeGenotype", "disease_cohort", 'ADAD_fam_mut', "ind_mut_status", "ind_mutation")])
+#COVARIATES.tmp = data.matrix(METADATA[,c( 'individualID', "sex", "apoeGenotype", "disease_cohort", 'ADAD_fam_mut', "ind_mut_status", "ind_mutation")])
+COVARIATES.tmp = data.matrix(METADATA[,c( 'totalID', "sex", "apoeGenotype", "disease_cohort", 'ADAD_fam_mut', "ind_mut_status", "ind_mutation")])
 COVARIATES.tmp[is.na(COVARIATES.tmp)] = 0
 tree = hclust(as.dist(t(cqn_counts$E.no.na)))
 cols = WGCNA::labels2colors(COVARIATES.tmp);
@@ -238,6 +254,7 @@ WGCNA::plotDendroAndColors(tree,
 ```
 
 ### Distribution of samples (log cpm)
+Log(Counts Per Million) density distribution of all genes accross each sample by cohort
 ```{r lcpm.dist, cache=FALSE, fig.height=6, fig.width=8, results='asis', eval=TRUE}
 # Plot abberent distribution of logcpm counts
 tmp1 = cqn_counts$E %>%
@@ -256,7 +273,6 @@ cr = cor(t(cqn_counts$E.no.na))
 hist(cr, main = 'Distribution of correlation between genes', xlab = 'Correlation')
 ```
 
-
 ### Significant Covariates
 Correlation between pca of unadjusted mRNA expression and covariates are used to find significant covariates
 ```{r preadj.covariates, cache=FALSE, fig.height=6, fig.width=8, results='asis', eval=TRUE}
@@ -268,14 +284,15 @@ cqn_counts$E.no.na[is.na(cqn_counts$E.no.na)] = 0
 #clean_md
 METADATA <- as.data.frame( clean_md)
 row.names(METADATA) <- import_metadata$sampleID 
-METADATA <- METADATA[, colnames(METADATA) != 'individualID' ]
+METADATA <- METADATA[, colnames(METADATA) != c('individualID','totalID') ]
 
-Meta_HeatMap <- METADATA[, (colnames(METADATA) %in% c('individualID','sampleID')==F)  ]
+Meta_HeatMap <- METADATA[, (colnames(METADATA) %in% c('individualID', 'totalID', 'Family_ID','sampleID')==F)  ]
+#Meta_HeatMap <- METADATA[, (colnames(METADATA) %in% c('totalID','sampleID')==F)  ]
 Meta_HeatMap$sex <- Meta_HeatMap$Infered.Sex
-Meta_HeatMap[ , colnames(Meta_HeatMap)[ colnames(Meta_HeatMap) != 'Infered.Sex']]
+#Meta_HeatMap <- Meta_HeatMap[ , colnames(Meta_HeatMap)[ colnames(Meta_HeatMap) != 'Infered.Sex']]
 Iters <- colnames(Meta_HeatMap)[colSums(is.na(Meta_HeatMap)) > 0]
-dim(Meta_HeatMap)
-dim(Meta_HeatMap[ complete.cases(Meta_HeatMap),])
+##_## dim(Meta_HeatMap)
+##_## dim(Meta_HeatMap[ complete.cases(Meta_HeatMap),])
 writeLines("Total Metadata with Missing variables:")
 preAdjustedSigCovars = runPCAandPlotCorrelations(cqn_counts$E.no.na, 
                                                  Meta_HeatMap,
@@ -291,11 +308,13 @@ for( focus in 1:length(Iters)){
   Meta_HeatMap_t$sampleID <- row.names(METADATA)
   Meta_HeatMap_t <- Meta_HeatMap_t[ !is.na(Meta_HeatMap_t[,Iters[focus] ]), ]
   exp <- cqn_counts$E.no.na[,Meta_HeatMap_t$sampleID]
-  Meta_HeatMap_t <- Meta_HeatMap_t[, (colnames(Meta_HeatMap_t) %in% c('sex', 'sampleID')) == F]
+  Meta_HeatMap_t <- Meta_HeatMap_t[, (colnames(Meta_HeatMap_t) %in% c('sex', 'totalID','Family_ID', 'sampleID')) == F]
   
+  ##_##'ADAD_fam_mut',
   if( Iters[focus] %in% c( 'ADAD_fam_mut', 'CDR' )){
-    Meta_HeatMap_t <- Meta_HeatMap_t[ , 
-                                    (colnames(Meta_HeatMap_t) %in% names( which(apply(Meta_HeatMap_t, 2, var) == 0) ))==F,]
+    Meta_HeatMap_t <- Meta_HeatMap_t[ , (colnames(Meta_HeatMap_t) %in% names( which(apply(Meta_HeatMap_t, 2, var) == 0) ))==F,]
+    Meta_HeatMap_t <- Meta_HeatMap_t[ , (colnames(Meta_HeatMap_t) %in% 'disease_cohort')==F,]
+
   }else{}
   
   preAdjustedSigCovars = runPCAandPlotCorrelations(exp, 
@@ -337,6 +356,7 @@ primaryVariable <- c( "disease_cohort")
 #exclude APOE for now, can condition on it later
 FactorCovariates <- c( "sex" )
 ContCovariates <- c("RIN", "RnaSeqMetrics__PCT_CODING_BASES", "RnaSeqMetrics__PCT_INTERGENIC_BASES", "RnaSeqMetrics__INTRONIC_BASES", "RnaSeqMetrics__PCT_INTRONIC_BASES")
+#METADATA <- METADATA[ , colnames(METADATA) != 'Family_ID']
                
 #postAdjustCovars = c( 'sex', 'race', 'yearsEducation', 'bmi' );
 postAdjustCovars = 'sex';
@@ -355,7 +375,8 @@ cqn_counts$E.no.na <- cqn_counts$E.no.na[,row.names(METADATA)]
 NEW.COUNTS <- cqn_counts$E
 notEstimable = c()
 # Re-Assign the induvidualIDs
-METADATA$individualID <- clean_md[ row.names(METADATA), ]$individualID
+#METADATA$individualID <- clean_md[ row.names(METADATA), ]$individualID
+METADATA$individualID <- clean_md[ row.names(METADATA), ]$totalID
 METADATA$sex <- METADATA$Infered.Sex
 METADATA <- METADATA[ , colnames(METADATA) != 'Infered.Sex']
 while(length(residualSigCovars$significantCovars)!=0 && loopCount <= 20){
@@ -431,8 +452,10 @@ tmp <- paste('Using following covariates in the final model:', modelStr)
 ```
 
 ### Sanity check
+Have we regressed out the confounding variable signal 
 ```{r residual.adj, cache=FALSE, fig.height=6, fig.width=8, results='asis', eval=TRUE}
 # Find PC of residual gene expression and significant covariates that are highly correlated with PCs
+METADATA$Family_ID <- as.factor(METADATA$Family_ID)
 residualSigCovars = runPCAandPlotCorrelations(expr, 
                                               METADATA,
                                               'adjusted design(voom-normalized)',
@@ -444,7 +467,9 @@ Coexpression of genes
 cr = cor(t(expr))
 hist(cr, main = 'Distribution of correlation between genes', xlab = 'Correlation')
 ```
-PCA of residual data
+
+### PCA of residual data
+PCA based clustering of samples after regressing out confounding variables. Health controls are masked beause they have no APOE status
 ```{r decompse.normalise.data2.1, cache=FALSE, fig.height=6, fig.width=8, results='asis', eval=TRUE}
 # Find principal components of expression to plot
 PC <- prcomp(expr, scale.=T, center = T)
@@ -458,7 +483,8 @@ p <- p + geom_point(aes(color=disease_cohort, shape=apoeGenotype, size=RIN))
 p <- p + theme_bw() + theme(legend.position="right")
 p
 ```
-Tree based clustering of residual data
+### Clustering of Samples
+Tree based clustering of samples before regressing out confounding variables
 ```{r decompse.normalise.data2.2, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
 # Eucledian tree based analysis
 COVARIATES.tmp = data.matrix(METADATA[,c( 'individualID', "sex", "apoeGenotype", "disease_cohort", 'ADAD_fam_mut', "ind_mut_status", "ind_mutation")])
@@ -494,18 +520,31 @@ RESIDUAL.NET.GENE_EXPRESSION = residuals.MArrayLM(VOOM.NET.FIT,
 
 
 ### Differential expression analysis (with Risk Cohort as primary variable)
-Differential expression is performed on the primary variable by controlling for covariates identified above
+Differential expression is performed by controlling for covariates identified above. Comparisons are between the Matched FamilialAD Controls, the FamilialAD Mutation carriers, the sporatic AD cohort and the healthy controls
 
-Interpretation of Diagnosis
-0. Control: No AD Risk
-1. Familial: Familial AD Risk
-2. Sporadic: Sporadic AD Risk
+Comparisons Run - 6
 
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp0, cache=TRUE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
+Interpretation of Diagnosis -
+Control: No AD Risk
+FamilialAD_Mut: Familial AD Risk With Mutation
+FamilialAD_NoMut: Familial AD Risk Without Mutation
+Sporadic: Sporadic AD Risk
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are deemed significantly differentially expressed
+```{r diff.exp0.5, cache=TRUE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
 # Get design matrix
-DESIGN = getDesignMatrix(METADATA[, c(primaryVariable[1], postAdjustCovars), drop = F], Intercept = F)
+METADATA_Sink <- METADATA
+METADATA$Comp <- as.character( METADATA$disease_cohort )
+METADATA[ METADATA$disease_cohort %in% 'FamilialAD' & METADATA$ind_mut_status %in% 'HasMut', ]$Comp <- 'FamilialAD_Mut'
+METADATA[ METADATA$disease_cohort %in% 'FamilialAD' & METADATA$ind_mut_status %in% 'NoMut', ]$Comp <- 'FamilialAD_NoMut'
+METADATA$Comp <- as.factor(METADATA$Comp)
+
+#Previous was the Full Cohorts
+# Add Cohort in  here to try and  be more conservative
+DESIGN = getDesignMatrix(METADATA[, c('Comp', postAdjustCovars), drop = F], Intercept = F)
 DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+#colnames(DESIGN$design) <- gsub('disease_cohort','',colnames(DESIGN$design))
+colnames(DESIGN$design) <- gsub('Comp','',colnames(DESIGN$design))
 # Estimate voom weights for dispersion control
 VOOM.WEIGHTS = voom(cqn_counts$counts, design=DESIGN$design, plot=F)
 #_#VOOM.WEIGHTS = voom(cnts, design=DESIGN$design, plot=F)
@@ -523,10 +562,15 @@ FIT = lmFit(cqn_counts$E,
             block = METADATA$individualID,
             weights = VOOM.WEIGHTS$weights,
             correlation = correlation$cor)
+
 # Fit contrast
-contrast = makeContrasts(contrasts=c("disease_cohort0-disease_cohort1", 
-                                     "disease_cohort0-disease_cohort2",
-                                     "disease_cohort1-disease_cohort2"),
+contrast = makeContrasts(contrasts=c("FamilialAD_NoMut-FamilialAD_Mut", 
+                                     "FamilialAD_NoMut-SporadicAD",
+                                     "FamilialAD_NoMut-Healthy_Control",
+                                     "FamilialAD_Mut-SporadicAD", 
+                                     "FamilialAD_Mut-Healthy_Control",
+                                     "SporadicAD-Healthy_Control"
+                                    ),
                          levels = colnames(FIT$coefficients))
 FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
 FIT.CONTR = eBayes(FIT.CONTR)
@@ -535,7 +579,13 @@ DE = lapply(1:dim(contrast)[2], function(i, FIT){
   topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
     rownameToFirstColumn('ensembl_gene_id')
 }, FIT.CONTR)
-names(DE) = c('Control-FamilialAD', 'Control-SporadicAD', 'FamilialAD-SporadicAD' )
+names(DE) = c("FamilialAD_NoMut-FamilialAD_Mut", 
+              "FamilialAD_NoMut-SporadicAD",
+              "FamilialAD_NoMut-Healthy_Control",
+              "FamilialAD_Mut-SporadicAD", 
+              "FamilialAD_Mut-Healthy_Control",
+              "SporadicAD-Healthy_Control"
+            )
 DE = DE %>% 
   rbindlist(idcol = 'Comparison') %>%
   left_join(biomart_results %>%
@@ -559,30 +609,121 @@ p = p + facet_grid(.~Comparison, scales = 'fixed')
 p
 all.diff.exp=NULL
 all.fit=NULL
-all.diff.exp = c(all.diff.exp, list(AD_Cohort = DE))
-all.fit = c(all.fit, list(AD_Cohort = FIT))
+all.diff.exp = c(all.diff.exp, list(AD_Cohort_CaseControl = DE))
+all.fit = c(all.fit, list(AD_Cohort_CaseControl = FIT))
 ```
 
+### Differential expression analysis All 'controls' versus Sporatic and FamilialAD cases (with Risk Cohort as primary variable)
+Differential expression is performed by controlling for covariates identified above. Comparisons are between the (FamilialAD Controls + healthy controls) VS. the FamilialAD Mutation carriers, and the sporatic AD cohort 
+
+Comparisons Run - 2
+
+Interpretation of Diagnosis
+Control: No AD Risk + FamilialAD_NoMut
+FamilialAD_Mut: Familial AD Risk With Mutation
+Sporadic: Sporadic AD Risk
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are deemed significantly differentially expressed
+```{r diff.exp0, cache=TRUE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
+# Get design matrix
+METADATA <- METADATA_Sink
+METADATA$Comp <- as.character( METADATA$disease_cohort )
+METADATA[ METADATA$disease_cohort %in% 'FamilialAD' & METADATA$ind_mut_status %in% 'HasMut', ]$Comp <- 'FamilialAD_Mut'
+METADATA[ METADATA$disease_cohort %in% 'FamilialAD' & METADATA$ind_mut_status %in% 'NoMut', ]$Comp <- 'Control'
+METADATA[ METADATA$disease_cohort %in% 'Healthy_Control', ]$Comp <- 'Control'
+
+METADATA$Comp <- as.factor(METADATA$Comp)
+
+#Previous was the Full Cohorts
+# Add Cohort in  here to try and  be more conservative
+DESIGN = getDesignMatrix(METADATA[, c('Comp', postAdjustCovars), drop = F], Intercept = F)
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+#colnames(DESIGN$design) <- gsub('disease_cohort','',colnames(DESIGN$design))
+colnames(DESIGN$design) <- gsub('Comp','',colnames(DESIGN$design))
+# Estimate voom weights for dispersion control
+VOOM.WEIGHTS = voom(cqn_counts$counts, design=DESIGN$design, plot=F)
+#_#VOOM.WEIGHTS = voom(cnts, design=DESIGN$design, plot=F)
+# Fit linear model using new weights and new design
+
+VOOM.WEIGHTS$E = cqn_counts$E
+correlation = parallelDuplicateCorrelation(VOOM.WEIGHTS,
+                                             block = as.character( METADATA$individualID ),
+                                             method = 'lmer')
+
+#correlatio = duplicateCorrelation(VOOM.WEIGHTS,DESIGN$design,block=METADATA$individualID)
+
+FIT = lmFit(cqn_counts$E,
+            design = DESIGN$design,
+            block = METADATA$individualID,
+            weights = VOOM.WEIGHTS$weights,
+            correlation = correlation$cor)
+
+# Fit contrast
+contrast = makeContrasts(contrasts=c("Control-FamilialAD_Mut", 
+                                     "Control-SporadicAD"
+                                    ),
+                         levels = colnames(FIT$coefficients))
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = c("Control-FamilialAD_Mut", 
+              "Control-SporadicAD"
+            )
+DE = DE %>% 
+  rbindlist(idcol = 'Comparison') %>%
+  left_join(biomart_results %>%
+              dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gene_gc_content, gene_length) %>%
+              unique()) %>%
+  dplyr::mutate(Study = 'UW',
+                Direction = logFC/abs(logFC),
+                Direction = factor(Direction, c(-1,1), c('-1' = 'DOWN', '1' = 'UP')),
+                Direction = as.character(Direction))
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+writeLines('Differentially expressed genes at an FDR 0.05 and logFC 1.2')
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Comparison, Direction) %>%
+  group_by(Comparison, Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+p = ggplot(DE, aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
+p = p + scale_color_manual(values = c('green','grey','red'))
+p = p + facet_grid(.~Comparison, scales = 'fixed')
+p
+
+all.diff.exp = c(all.diff.exp, list(AD_Comb_Cohort = DE))
+all.fit = c(all.fit, list(AD_Comb_Cohort = FIT))
+```
+
+
 ### Differential expression analysis (with Mutation Status as primary variable)
-Differential expression is performed on the mutation status that is profiled as mutated by controlling for covariates identified above and disease cohort
+Differential expression is performed on the mutation status that is profiled as mutated by controlling for covariates identified above and disease cohort. Unknown (NA) mutation status is ignored as the patient's status of mutation is unknown.
+
+Comparisons Run - 1
 
 Interpretation of Mutation Status
-0. NoMut: No Mutation in (APP, PSEN1, PSEN2, Other)
-1. Mut: Has a Mutation in (APP, PSEN1, PSEN2, Other)
-9. NA: No Mutation Status Available (These are mostly controls)
+NoMut: No Mutation in (APP, PSEN1, PSEN2, Other)
+Mut: Has a Mutation in (APP, PSEN1, PSEN2, Other)
 
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are deemed significantly differentially expressed
 ```{r diff.exp2, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
 #Remove NAs (The Control samples don't have mutation status)
-METADATA_Use <- METADATA
-METADATA_Use$ind_mut_status <- addNA(METADATA_Use$ind_mut_status)
-levels(METADATA_Use$ind_mut_status) <- c(levels(METADATA_Use$ind_mut_status), 9)
-METADATA_Use$ind_mut_status[ is.na(METADATA_Use$ind_mut_status)] <- 9
+METADATA_Use <- METADATA_Sink
+#METADATA_Use$ind_mut_status <- addNA(METADATA_Use$ind_mut_status)
+#levels(METADATA_Use$ind_mut_status) <- c(levels(METADATA_Use$ind_mut_status), 9)
+levels(METADATA_Use$ind_mut_status) <- c(levels(METADATA_Use$ind_mut_status), 'UNK')
+METADATA_Use$ind_mut_status[ is.na(METADATA_Use$ind_mut_status)] <- 'UNK'
 METADATA_Use$ind_mut_status <- as.factor(as.character(METADATA_Use$ind_mut_status))
 
 # Get design matrix
 DESIGN = getDesignMatrix(METADATA_Use[, c("ind_mut_status", primaryVariable, postAdjustCovars), drop = F], Intercept = F)
 DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+colnames(DESIGN$design) <- gsub('ind_mut_status','',colnames(DESIGN$design))
+
 # Estimate voom weights for dispersion control
 VOOM.WEIGHTS = voom(cqn_counts$counts, design=DESIGN$design, plot=F)
 #_#VOOM.WEIGHTS = voom(cnts, design=DESIGN$design, plot=F)
@@ -600,9 +741,9 @@ FIT = lmFit(cqn_counts$E,
             correlation = correlation$cor)
 
 # Fit contrast
-contrast = makeContrasts(contrasts=c("ind_mut_status0-ind_mut_status1", 
-                                     "ind_mut_status0-ind_mut_status9",
-                                     "ind_mut_status1-ind_mut_status9"),
+contrast = makeContrasts(contrasts=c("NoMut-HasMut"#, 
+                                     ),#"HasMut-UNK",
+                                     #"NoMut-UNK"),
                          levels = colnames(FIT$coefficients))
 FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
 FIT.CONTR = eBayes(FIT.CONTR)
@@ -611,7 +752,7 @@ DE = lapply(1:dim(contrast)[2], function(i, FIT){
   topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
     rownameToFirstColumn('ensembl_gene_id')
 }, FIT.CONTR)
-names(DE) = c('NoMut-HasMut', 'NoMut-MissingData', 'HasMut-Missing' )
+names(DE) = c('NoMut-HasMut')#, 'NoMut-MissingData', 'HasMut-Missing' )
 DE = DE %>% 
   rbindlist(idcol = 'Comparison') %>%
   left_join(biomart_results %>%
@@ -638,28 +779,32 @@ all.fit = c(all.fit, list(MutationStatus = FIT))
 ```
 
 ### Differential expression analysis (with Gene Mutation as primary variable)
-Differential expression is performed on the specific gene that is profiled as mutated by controlling for covariates identified above and disease cohort
+Differential expression is performed on the specific gene that is profiled as mutated by controlling for covariates identified above and disease cohort.
+
+Comparisons Run - 15
 
 Interpretation of Mutation Status
-0. NoMut: No Mutation in (APP, PSEN1, PSEN2, Other)
-1. PS1: Has a Mutation in PSEN1
-2. PS2: Has a Mutation in PSEN1 PSEN2
-3. APP: Has a Mutation in PSEN1 APP
-4. Other: A mutation in a gene other than APP, PSEN1, or PSEN2
-9. NA: No Mutation Status Available (These are mostly controls)
+NoMut: No Mutation in (APP, PSEN1, PSEN2, Other)
+PS1: Has a Mutation in PSEN1
+PS2: Has a Mutation in PSEN1 PSEN2
+APP: Has a Mutation in PSEN1 APP
+Other: A mutation in a gene other than APP, PSEN1, or PSEN2
+UNK: No Mutation Status Available (These are mostly controls)
 
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are deemed significantly differentially expressed
 ```{r diff.exp3, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
 #Remove NAs (The Control samples don't have mutation status)
-METADATA_Use <- METADATA
+METADATA_Use <- METADATA_Sink
 METADATA_Use$ind_mutation <- addNA(METADATA_Use$ind_mutation)
-levels(METADATA_Use$ind_mutation) <- c(levels(METADATA_Use$ind_mutation), 9)
-METADATA_Use$ind_mutation[ is.na(METADATA_Use$ind_mutation)] <- 9
+levels(METADATA_Use$ind_mutation) <- c(levels(METADATA_Use$ind_mutation), 'UNK')
+METADATA_Use$ind_mutation[ is.na(METADATA_Use$ind_mutation)] <- 'UNK'
 METADATA_Use$ind_mutation <- as.factor(as.character(METADATA_Use$ind_mutation))
 
 # Get design matrix
 DESIGN = getDesignMatrix(METADATA_Use[, c("ind_mutation", primaryVariable, postAdjustCovars), drop = F], Intercept = F)
 DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+colnames(DESIGN$design) <- gsub('ind_mutation','',colnames(DESIGN$design))
+
 # Estimate voom weights for dispersion control
 VOOM.WEIGHTS = voom(cqn_counts$counts, design=DESIGN$design, plot=F)
 #_#VOOM.WEIGHTS = voom(cnts, design=DESIGN$design, plot=F)
@@ -677,21 +822,21 @@ FIT = lmFit(cqn_counts$E,
             correlation = correlation$cor)
 
 # Fit contrast
-contrast = makeContrasts(contrasts=c("ind_mutation0-ind_mutation1", 
-                                     "ind_mutation0-ind_mutation2",
-                                     "ind_mutation0-ind_mutation3",
-                                     "ind_mutation0-ind_mutation4",
-                                     "ind_mutation0-ind_mutation9",
-                                     "ind_mutation1-ind_mutation2",
-                                     "ind_mutation1-ind_mutation3",
-                                     "ind_mutation1-ind_mutation4",
-                                     "ind_mutation1-ind_mutation9",
-                                     "ind_mutation2-ind_mutation3",
-                                     "ind_mutation2-ind_mutation4",
-                                     "ind_mutation2-ind_mutation9",
-                                     "ind_mutation3-ind_mutation4",
-                                     "ind_mutation3-ind_mutation9",
-                                     "ind_mutation4-ind_mutation9"),
+contrast = makeContrasts(contrasts=c("APP-None", 
+                                     "APP-Other",
+                                     "APP-PS1",
+                                     "APP-PS2",
+                                     "APP-UNK",
+                                     "None-Other",
+                                     "None-PS1",
+                                     "None-PS2",
+                                     "None-UNK",
+                                     "Other-PS1",
+                                     "Other-PS2",
+                                     "Other-UNK",
+                                     "PS1-PS2",
+                                     "PS1-UNK",
+                                     "PS2-UNK"),
                          levels = colnames(FIT$coefficients))
 FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
 FIT.CONTR = eBayes(FIT.CONTR)
@@ -700,22 +845,22 @@ DE = lapply(1:dim(contrast)[2], function(i, FIT){
   topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
     rownameToFirstColumn('ensembl_gene_id')
 }, FIT.CONTR)
-names(DE) = c("NoMut-PS1", 
-              "NoMut-PS2",
-              "NoMut-APP",
-              "NoMut-Other",
-              "NoMut-NA",
-              "PS1-PS2",
-              "PS1-APP",
-              "PS1-Other",
-              "PS1-NA",
-              "PS2-APP",
-              "PS2-Other",
-              "PS2-NA",
+names(DE) = c("APP-None", 
               "APP-Other",
-              "APP-NA",
-              "Other-NA")
-
+              "APP-PS1",
+              "APP-PS2",
+              "APP-UNK",
+              "None-Other",
+              "None-PS1",
+              "None-PS2",
+              "None-UNK",
+              "Other-PS1",
+              "Other-PS2",
+              "Other-UNK",
+              "PS1-PS2",
+              "PS1-UNK",
+              "PS2-UNK")
+              
 DE = DE %>% 
   rbindlist(idcol = 'Comparison') %>%
   left_join(biomart_results %>%
@@ -743,17 +888,18 @@ all.fit = c(all.fit, list(MutationType = FIT))
 ### Differential expression analysis (with Sex as primary variable)
 Differential expression is performed on the mutation status that is profiled as mutated by controlling for covariates identified above and disease cohort
 
-Interpretation of Mutation Status
+Comparisons Run - 1
 
-
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are deemed significantly differentially expressed
 ```{r diff.exp4, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
 #Remove NAs (The Control samples don't have mutation status)
-METADATA_Use <- METADATA
+METADATA_Use <- METADATA_Sink
 
 # Get design matrix
 DESIGN = getDesignMatrix(METADATA_Use[, c("sex", primaryVariable, postAdjustCovars), drop = F], Intercept = F)
 DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+colnames(DESIGN$design) <- gsub( 'sex', '', colnames(DESIGN$design) )
+
 # Estimate voom weights for dispersion control
 VOOM.WEIGHTS = voom(cqn_counts$counts, design=DESIGN$design, plot=F)
 #_#VOOM.WEIGHTS = voom(cnts, design=DESIGN$design, plot=F)
@@ -771,7 +917,7 @@ FIT = lmFit(cqn_counts$E,
             correlation = correlation$cor)
 
 # Fit contrast
-contrast = makeContrasts(contrasts=c("sexmale-sexfemale"),
+contrast = makeContrasts(contrasts=c("male-female"),
                          levels = colnames(FIT$coefficients))
 FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
 FIT.CONTR = eBayes(FIT.CONTR)
@@ -808,28 +954,33 @@ all.fit = c(all.fit, list(Sex = FIT))
 
 
 ### Differential expression analysis (with Disease Cohort and Sex)
-Differential expression is performed on the Disease Cohort x Sex variable by controlling for covariates identified above
+Differential expression is performed on Comparisons are between the Matched FamilialAD Controls, the FamilialAD Mutation carriers, the sporatic AD cohort x Sex variable by controlling for covariates identified above.
 
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+Comparisons Run - 6
 
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are marked as differentially expressed
 Interpretation of Diagnosis
-0. Control: No AD Risk
-1. Familial: Familial AD Risk
-2. Sporadic: Sporadic AD Risk
+Control: No AD Risk
+FamilialAD_Mut: Familial AD Risk With Mutation
+FamilialAD_NoMut: Familial AD Risk Without Mutation
+Sporadic: Sporadic AD Risk
 
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+All conditions are looked at by sex
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are deemed significantly differentially expressed
+
 ```{r diff.exp5, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
 #Remove NAs (The Control samples don't have mutation status)
-METADATA_Use <- METADATA
-METADATA_Use$disease_cohort <- as.character(METADATA_Use$disease_cohort)
-METADATA_Use$disease_cohort[ METADATA_Use$disease_cohort == '0' ] <- 'Controls'
-METADATA_Use$disease_cohort[ METADATA_Use$disease_cohort == '1' ] <- 'Familial'
-METADATA_Use$disease_cohort[ METADATA_Use$disease_cohort == '2' ] <- 'Sporadic'
-METADATA_Use$disease_cohort <- as.factor(METADATA_Use$disease_cohort)
+METADATA_Use <- METADATA_Sink
+METADATA$Comp <- as.character( METADATA$disease_cohort )
+METADATA[ METADATA$disease_cohort %in% 'FamilialAD' & METADATA$ind_mut_status %in% 'HasMut', ]$Comp <- 'FamilialAD_Mut'
+METADATA[ METADATA$disease_cohort %in% 'FamilialAD' & METADATA$ind_mut_status %in% 'NoMut', ]$Comp <- 'FamilialAD_NoMut'
+METADATA$Comp <- as.factor(METADATA$Comp)
 
-METADATA_Use$disease_cohort.Sex = paste(METADATA_Use$disease_cohort,METADATA_Use$sex, sep = '.') %>%
+METADATA_Use$disease_cohort.Sex = paste(METADATA_Use$Comp,METADATA_Use$sex, sep = '.') %>%
   factor
 # Get design matrix
+# Add Cohort in  here to try and  be more conservative
 DESIGN = getDesignMatrix(METADATA_Use[, c('disease_cohort.Sex', setdiff(postAdjustCovars, 'Sex')), drop = F], Intercept = F)
 DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
 colnames(DESIGN$design) = gsub('disease_cohort.Sex','',colnames(DESIGN$design))
@@ -849,11 +1000,13 @@ FIT = lmFit(cqn_counts$E,
 
 # Fit contrast
 contrast = makeContrasts( 
-  contrasts=c(#"(Controls.male+Familial.male+Sporadic.male)/3-(Controls.female+Familial.female+Sporadic.female)/3", 
-              "Familial.male-Controls.male",
-              "Familial.male-Sporadic.male",
-              "Familial.female-Controls.female",
-              "Familial.female-Sporadic.female"),
+  contrasts=c("FamilialAD_NoMut.female-FamilialAD_Mut.female",
+              "FamilialAD_NoMut.male-FamilialAD_Mut.male",
+              "Healthy_Control.female-SporadicAD.female",
+              "Healthy_Control.male-SporadicAD.male",
+              "SporadicAD.female-FamilialAD_Mut.female",
+              "SporadicAD.male-FamilialAD_Mut.male"
+              ),
                          levels = colnames(FIT$coefficients))
 FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
 FIT.CONTR = eBayes(FIT.CONTR)
@@ -862,7 +1015,13 @@ DE = lapply(1:dim(contrast)[2], function(i, FIT){
   topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
     rownameToFirstColumn('ensembl_gene_id')
 }, FIT.CONTR)
-names(DE) = c('Familial-Controls.IN.MALE','Familial-Sporadic.IN.MALE', 'Familial-Controls.IN.FEMALE','Familial-Sporadic.IN.FEMALE')
+names(DE) = c( "FamilialAD_NoMut.female-FamilialAD_Mut.female",
+              "FamilialAD_NoMut.male-FamilialAD_Mut.male",
+              "Healthy_Control.female-SporadicAD.female",
+              "Healthy_Control.male-SporadicAD.male",
+              "SporadicAD.female-FamilialAD_Mut.female",
+              "SporadicAD.male-FamilialAD_Mut.male" 
+            )
 DE = DE %>% 
   rbindlist(idcol = 'Comparison') %>%
   left_join(biomart_results %>%
@@ -889,21 +1048,112 @@ all.diff.exp = c(all.diff.exp, list(AD_Cohort.Sex = DE))
 all.fit = c(all.fit, list(AD_Cohort.Sex = FIT))
 ```
 
+### Differential expression analysis ( All 'controls' versus Sporatic and FamilialAD cases and Sex ) 
+Differential expression comparisons are between the (FamilialAD Controls + healthy controls) VS. the FamilialAD Mutation carriers, and the sporatic AD cohort x Sex variable by controlling for covariates identified above.
 
-### Differential expression analysis (with Within FamCohort Between Mut No Mut)
-Differential expression is performed on the Disease Cohort x Sex variable by controlling for covariates identified above
-
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+Comparisons Run - 6
 
 Interpretation of Diagnosis
-0. Control: No AD Risk
-1. Familial: Familial AD Risk
-2. Sporadic: Sporadic AD Risk
+Control: No AD Risk + FamilialAD_NoMut
+FamilialAD_Mut: Familial AD Risk With Mutation
+Sporadic: Sporadic AD Risk
 
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are deemed significantly differentially expressed
+
 ```{r diff.exp6, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
 #Remove NAs (The Control samples don't have mutation status)
+METADATA <- METADATA_Sink
+METADATA$Comp <- as.character( METADATA$disease_cohort )
+METADATA[ METADATA$disease_cohort %in% 'FamilialAD' & METADATA$ind_mut_status %in% 'HasMut', ]$Comp <- 'FamilialAD_Mut'
+METADATA[ METADATA$disease_cohort %in% 'FamilialAD' & METADATA$ind_mut_status %in% 'NoMut', ]$Comp <- 'Control'
+METADATA[ METADATA$disease_cohort %in% 'Healthy_Control', ]$Comp <- 'Control'
+
+METADATA$Comp <- as.factor(METADATA$Comp)
 METADATA_Use <- METADATA
+METADATA_Use$disease_cohort.Sex = paste(METADATA_Use$Comp,METADATA_Use$sex, sep = '.') %>%
+  factor
+# Get design matrix
+# Add Cohort in  here to try and  be more conservative
+DESIGN = getDesignMatrix(METADATA_Use[, c('disease_cohort.Sex', setdiff(postAdjustCovars, 'Sex')), drop = F], Intercept = F)
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+colnames(DESIGN$design) = gsub('disease_cohort.Sex','',colnames(DESIGN$design))
+# Estimate voom weights for dispersion control
+VOOM.WEIGHTS =  voom(cqn_counts$counts, design=DESIGN$design, plot=F)
+# Fit linear model using new weights and new design
+VOOM.WEIGHTS$E = cqn_counts$E
+correlation = parallelDuplicateCorrelation(VOOM.WEIGHTS,
+                                             block = as.character( METADATA$individualID ),
+                                             method = 'lmer')
+
+FIT = lmFit(cqn_counts$E,
+            design = DESIGN$design,
+            block = METADATA$individualID,
+            weights = VOOM.WEIGHTS$weights,
+            correlation = correlation$cor)
+
+# Fit contrast
+contrast = makeContrasts( 
+  contrasts=c("Control.female-FamilialAD_Mut.female",
+              "Control.male-FamilialAD_Mut.male",
+              "Control.female-SporadicAD.female",
+              "Control.male-SporadicAD.male",
+              "SporadicAD.female-FamilialAD_Mut.female",
+              "SporadicAD.male-FamilialAD_Mut.male"
+              ),
+                         levels = colnames(FIT$coefficients))
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = c("Control.female-FamilialAD_Mut.female",
+              "Control.male-FamilialAD_Mut.male",
+              "Control.female-SporadicAD.female",
+              "Control.male-SporadicAD.male",
+              "SporadicAD.female-FamilialAD_Mut.female",
+              "SporadicAD.male-FamilialAD_Mut.male"
+            )
+DE = DE %>% 
+  rbindlist(idcol = 'Comparison') %>%
+  left_join(biomart_results %>%
+              dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gene_gc_content, gene_length) %>%
+              unique()) %>%
+  dplyr::mutate(Study = 'UW',
+                Direction = logFC/abs(logFC),
+                Direction = factor(Direction, c(-1,1), c('-1' = 'DOWN', '1' = 'UP')),
+                Direction = as.character(Direction))
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+writeLines('Differentially expressed genes at an FDR 0.05 and logFC 1.2')
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Comparison, Direction) %>%
+  group_by(Comparison, Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+p = ggplot(DE, aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
+p = p + scale_color_manual(values = c('green','grey','red'))
+p = p + facet_grid(.~Comparison, scales = 'fixed')
+p
+all.diff.exp = c(all.diff.exp, list(AD_CaseCntrl_Cohort.Sex = DE))
+all.fit = c(all.fit, list(AD_CaseCntrl_Cohort.Sex = FIT))
+```
+
+### Differential expression analysis (with Within Sporatic Cohort Between Mut No Mut)
+Differential expression is performed on the Disease Cohort x Sex variable by controlling for covariates identified above
+
+Comparisons - 1
+
+Interpretation of Diagnosis
+Sporadic_HasMut: Sporadic AD Risk and A mutation
+Sporadic_HasMut: Sporadic AD Risk and does not have a mutation
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are differentially expressed
+```{r diff.exp7, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
+#Remove NAs (The Control samples don't have mutation status)
+METADATA_Use <- METADATA_Sink
 METADATA_Use$disease_cohort <- as.character(METADATA_Use$disease_cohort)
 METADATA_Use$disease_cohort[ METADATA_Use$disease_cohort == '0' ] <- 'Controls'
 METADATA_Use$disease_cohort[ METADATA_Use$disease_cohort == '1' ] <- 'Familial'
@@ -916,12 +1166,12 @@ METADATA_Use$disease_cohort <- as.factor(METADATA_Use$disease_cohort)
 METADATA_Use$Cohort.Mut <- as.factor(METADATA_Use$Cohort.Mut)
 
 # Get design matrix
-DESIGN = getDesignMatrix(METADATA_Use[, c('Cohort.Mut', setdiff(postAdjustCovars, 'Sex')), drop = F], Intercept = F)
+DESIGN = getDesignMatrix(METADATA_Use[, c('Cohort.Mut', postAdjustCovars), drop = F], Intercept = F)
 DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
 colnames(DESIGN$design) = gsub('Cohort.Mut','',colnames(DESIGN$design))
 # Estimate voom weights for dispersion control
 VOOM.WEIGHTS =  voom(cqn_counts$counts, design=DESIGN$design, plot=F)
-# Fit linear model using new weights and new design
+
 # Fit linear model using new weights and new design
 VOOM.WEIGHTS$E = cqn_counts$E
 correlation = parallelDuplicateCorrelation(VOOM.WEIGHTS,
@@ -937,12 +1187,8 @@ FIT = lmFit(cqn_counts$E,
 # Fit contrast
 contrast = makeContrasts( 
   contrasts=c(
-              "Familial.0-Familial.1",
-              "Sporadic.0-Sporadic.1",
-              "Sporadic.0-Familial.1",
-              "Familial.0-Sporadic.1",
-              "Sporadic.0-Familial.0",
-              "Sporadic.1-Familial.1"),
+              "SporadicAD.NoMut-SporadicAD.HasMut"
+            ),
                          levels = colnames(FIT$coefficients))
 FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
 FIT.CONTR = eBayes(FIT.CONTR)
@@ -951,12 +1197,9 @@ DE = lapply(1:dim(contrast)[2], function(i, FIT){
   topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
     rownameToFirstColumn('ensembl_gene_id')
 }, FIT.CONTR)
-names(DE) = c('Familial_NoMut-Familial_Mut',
-              'Sporadic_NoMut-Sporadic_Mut', 
-              'Sporadic_NoMut-Familial_Mut',
-              'Familial_NoMut-Sporadic_Mut',
-              'Sporadic_NoMut-Familial_NoMut',
-              'Sporadic_Mut-Familial_Mut')
+names(DE) = c("SporadicAD.NoMut-SporadicAD.HasMut"
+            )
+
 DE = DE %>% 
   rbindlist(idcol = 'Comparison') %>%
   left_join(biomart_results %>%
@@ -979,21 +1222,23 @@ p = ggplot(DE, aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_
 p = p + scale_color_manual(values = c('green','grey','red'))
 p = p + facet_grid(.~Comparison, scales = 'fixed')
 p
-all.diff.exp = c(all.diff.exp, list(AD_Cohort.Sex = DE))
-all.fit = c(all.fit, list(AD_Cohort.Sex = FIT))
+all.diff.exp = c(all.diff.exp, list(SporaticMut_NoMut = DE))
+all.fit = c(all.fit, list(SporaticMut_NoMut = FIT))
 ```
 
 ### Differential expression analysis ( with FAD_NoMut+HC versus Sporatic (Non-PSEN1) )
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
 
 0. Control: FAD_NoMut or HC
 1. Cases: Sporatic AD (Non-PSEN1) 
 9. Other Samples
 
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp7, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
+Comparisons - 1
+(39)
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are differentially expressed
+```{r diff.exp8, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
 #Remove NAs (The Control samples don't have mutation status)
-METADATA_Use <- METADATA
+METADATA_Use <- METADATA_Sink
 METADATA_Use$ind_mut_status <- as.character(METADATA_Use$ind_mut_status)
 METADATA_Use$ind_mut_status[ is.na(METADATA_Use$ind_mut_status) ] <- 9
 METADATA_Use$ind_mutation <- as.character(METADATA_Use$ind_mutation)
@@ -1001,11 +1246,11 @@ METADATA_Use$ind_mutation[ is.na(METADATA_Use$ind_mutation) ] <- 9
 
 METADATA_Use$FADNoMut_HC_vs_SporaticNoPSEN1 <- 9
 #HC
-METADATA_Use[ METADATA_Use$disease_cohort == 0, ]$FADNoMut_HC_vs_SporaticNoPSEN1 <- 0
+METADATA_Use[ as.character(METADATA_Use$disease_cohort) %in% 'Healthy_Control', ]$FADNoMut_HC_vs_SporaticNoPSEN1 <- 0
 #FAD Controls
-METADATA_Use[ METADATA_Use$disease_cohort == 1 & METADATA_Use$ind_mut_status == 0, ]$FADNoMut_HC_vs_SporaticNoPSEN1 <- 0
+METADATA_Use[ as.character(METADATA_Use$disease_cohort) %in% 'FamilialAD' & as.character(METADATA_Use$ind_mut_status) == 'NoMut', ]$FADNoMut_HC_vs_SporaticNoPSEN1 <- 0
 #Cases
-METADATA_Use[ METADATA_Use$disease_cohort == 1 & METADATA_Use$ind_mutation %in% c('2','3','4'), ]$FADNoMut_HC_vs_SporaticNoPSEN1 <- 1
+METADATA_Use[ as.character(METADATA_Use$disease_cohort) == 'SporadicAD' & as.character(METADATA_Use$ind_mutation) %in% c('APP','Other','PS2'), ]$FADNoMut_HC_vs_SporaticNoPSEN1 <- 1
 
 
 METADATA_Use$FADNoMut_HC_vs_SporaticNoPSEN1 <- as.factor(METADATA_Use$FADNoMut_HC_vs_SporaticNoPSEN1)
@@ -1071,15 +1316,16 @@ all.fit = c(all.fit, list( FADNoMut_HC_vs_SporaticNoPSEN1 = FIT))
 ```
 
 
-### Differential expression analysis (familial mutation - non-mutation excluding PS2 and APP mutations )
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
+### Differential expression analysis (familial mutation PSEN1 Only - non-mutation )
+
+Comparisons - 1
 
 0. Control: FAD_NoMut 
 1. Cases: FAD_Mut( PSEN1 only ) 
 9. Other Samples
 
-Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are
-```{r diff.exp8, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are differentially expressed
+```{r diff.exp9, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
 #Remove NAs (The Control samples don't have mutation status)
 METADATA_Use <- METADATA
 METADATA_Use$ind_mut_status <- as.character(METADATA_Use$ind_mut_status)
@@ -1089,9 +1335,9 @@ METADATA_Use$ind_mutation[ is.na(METADATA_Use$ind_mutation) ] <- 9
 
 METADATA_Use$FAD_NoMut_FAD_PSEN1 <- 9
 #FAD Controls
-METADATA_Use[ METADATA_Use$disease_cohort == 1 & METADATA_Use$ind_mut_status == 0, ]$FAD_NoMut_FAD_PSEN1 <- 0
+METADATA_Use[ as.character(METADATA_Use$disease_cohort) %in% 'FamilialAD' & as.character(METADATA_Use$ind_mut_status) %in% 'NoMut', ]$FAD_NoMut_FAD_PSEN1 <- 0
 #Cases
-METADATA_Use[ METADATA_Use$disease_cohort == 1 & METADATA_Use$ind_mutation %in% '1', ]$FAD_NoMut_FAD_PSEN1 <- 1
+METADATA_Use[ as.character(METADATA_Use$disease_cohort) %in% 'FamilialAD' & as.character(METADATA_Use$ind_mutation) %in% 'PS1', ]$FAD_NoMut_FAD_PSEN1 <- 1
 
 
 METADATA_Use$FAD_NoMut_FAD_PSEN1 <- as.factor(METADATA_Use$FAD_NoMut_FAD_PSEN1)
@@ -1156,6 +1402,101 @@ all.diff.exp = c(all.diff.exp, list( FAD_NoMut_FAD_PSEN1 = DE))
 all.fit = c(all.fit, list( FAD_NoMut_FAD_PSEN1 = FIT))
 ```
 
+### Differential expression analysis (familial mutation PSEN1 only - non-mutation+HC  )
+
+Comparisons - 1
+
+0. Control: FAD_NoMut 
+1. Cases: FAD_Mut( PSEN1 only ) 
+9. Other Samples
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are differentially expressed
+Comparisons - 1
+
+0. Control: FAD_NoMut 
+1. Cases: FAD_Mut( PSEN1 only ) 
+9. Other Samples
+
+Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are differentially expressed
+```{r diff.exp10, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
+#Remove NAs (The Control samples don't have mutation status)
+METADATA_Use <- METADATA
+METADATA_Use$ind_mut_status <- as.character(METADATA_Use$ind_mut_status)
+METADATA_Use$ind_mut_status[ is.na(METADATA_Use$ind_mut_status) ] <- 9
+METADATA_Use$ind_mutation <- as.character(METADATA_Use$ind_mutation)
+METADATA_Use$ind_mutation[ is.na(METADATA_Use$ind_mutation) ] <- 9
+
+METADATA_Use$FAD_NoMut_FAD_PSEN1 <- 9
+#FAD Controls
+METADATA_Use[ as.character(METADATA_Use$disease_cohort) %in% 'FamilialAD' & as.character(METADATA_Use$ind_mut_status) %in% 'NoMut', ]$FAD_NoMut_FAD_PSEN1 <- 0
+#Healthy Controls
+METADATA_Use[ as.character(METADATA_Use$disease_cohort) %in% 'Healthy_Control' , ]$FAD_NoMut_FAD_PSEN1 <- 0
+
+#Cases
+METADATA_Use[ as.character(METADATA_Use$disease_cohort) %in% 'FamilialAD' & as.character(METADATA_Use$ind_mutation) %in% 'PS1', ]$FAD_NoMut_FAD_PSEN1 <- 1
+
+
+METADATA_Use$FAD_NoMut_FAD_PSEN1 <- as.factor(METADATA_Use$FAD_NoMut_FAD_PSEN1)
+METADATA_Use$ind_mutation <- as.factor(METADATA_Use$ind_mutation)
+METADATA_Use$ind_mut_status <- as.factor(METADATA_Use$ind_mut_status)
+
+# Get design matrix
+DESIGN = getDesignMatrix(METADATA_Use[, c('FAD_NoMut_FAD_PSEN1', postAdjustCovars ), drop = F], Intercept = F)
+DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
+colnames(DESIGN$design) = gsub('FAD_NoMut_FAD_PSEN1',"Comp",colnames(DESIGN$design))
+# Estimate voom weights for dispersion control
+VOOM.WEIGHTS =  voom(cqn_counts$counts, design=DESIGN$design, plot=F)
+# Fit linear model using new weights and new design
+# Fit linear model using new weights and new design
+VOOM.WEIGHTS$E = cqn_counts$E
+correlation = parallelDuplicateCorrelation(VOOM.WEIGHTS,
+                                             block = as.character( METADATA$individualID ),
+                                             method = 'lmer')
+
+FIT = lmFit(cqn_counts$E,
+            design = DESIGN$design,
+            block = METADATA$individualID,
+            weights = VOOM.WEIGHTS$weights,
+            correlation = correlation$cor)
+
+# Fit contrast
+contrast = makeContrasts( 
+  contrasts=c(
+              "Comp0-Comp1"),
+                         levels = colnames(FIT$coefficients))
+FIT.CONTR = contrasts.fit(FIT, contrasts=contrast)
+FIT.CONTR = eBayes(FIT.CONTR)
+# Get differnetial expression
+DE = lapply(1:dim(contrast)[2], function(i, FIT){
+  topTable(FIT, coef=i, number = dim(counts)[1], confint = T) %>%
+    rownameToFirstColumn('ensembl_gene_id')
+}, FIT.CONTR)
+names(DE) = c('FAD_With_HC_NoMut-FAD_PSEN1')
+DE = DE %>% 
+  rbindlist(idcol = 'Comparison') %>%
+  left_join(biomart_results %>%
+              dplyr::select(ensembl_gene_id, hgnc_symbol, percentage_gene_gc_content, gene_length) %>%
+              unique()) %>%
+  dplyr::mutate(Study = 'UW',
+                Direction = logFC/abs(logFC),
+                Direction = factor(Direction, c(-1,1), c('-1' = 'DOWN', '1' = 'UP')),
+                Direction = as.character(Direction))
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
+writeLines('Differentially expressed genes at an FDR 0.05 and logFC 1.2')
+tmp = DE %>%
+  dplyr::select(ensembl_gene_id, Comparison, Direction) %>%
+  group_by(Comparison, Direction) %>%
+  dplyr::summarise(FDR_0_05_FC_1.2 = length(unique(ensembl_gene_id))) %>%
+  spread(Direction, FDR_0_05_FC_1.2) 
+kable(tmp)
+p = ggplot(DE, aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
+p = p + scale_color_manual(values = c('grey', 'green','red'))
+p = p + facet_grid(.~Comparison, scales = 'fixed')
+p
+all.diff.exp = c(all.diff.exp, list( FAD_NoMut_with_HC_FAD_PSEN1 = DE))
+all.fit = c(all.fit, list( FAD_NoMut_with_HC_FAD_PSEN1 = FIT))
+```
 
 
 ### Store files in synapse
