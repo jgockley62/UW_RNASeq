@@ -974,17 +974,17 @@ Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.
 
 ```{r diff.exp5, cache=FALSE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
 #Remove NAs (The Control samples don't have mutation status)
-METADATA_Use <- METADATA_Sink
+METADATA <- METADATA_Sink
 METADATA$Comp <- as.character( METADATA$disease_cohort )
 METADATA[ METADATA$disease_cohort %in% 'FamilialAD' & METADATA$ind_mut_status %in% 'HasMut', ]$Comp <- 'FamilialAD_Mut'
 METADATA[ METADATA$disease_cohort %in% 'FamilialAD' & METADATA$ind_mut_status %in% 'NoMut', ]$Comp <- 'FamilialAD_NoMut'
 METADATA$Comp <- as.factor(METADATA$Comp)
 
-METADATA_Use$disease_cohort.Sex = paste(METADATA_Use$Comp,METADATA_Use$sex, sep = '.') %>%
+METADATA$disease_cohort.Sex = paste(METADATA$Comp,METADATA$sex, sep = '.') %>%
   factor
 # Get design matrix
 # Add Cohort in  here to try and  be more conservative
-DESIGN = getDesignMatrix(METADATA_Use[, c('disease_cohort.Sex', setdiff(postAdjustCovars, 'Sex')), drop = F], Intercept = F)
+DESIGN = getDesignMatrix(METADATA[, c('disease_cohort.Sex', setdiff(postAdjustCovars, 'Sex')), drop = F], Intercept = F)
 DESIGN$design = DESIGN$design[,linColumnFinder(DESIGN$design)$indepCols]
 colnames(DESIGN$design) = gsub('disease_cohort.Sex','',colnames(DESIGN$design))
 # Estimate voom weights for dispersion control
