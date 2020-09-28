@@ -378,8 +378,8 @@ cqn_counts$E.no.na <- cqn_counts$E.no.na[,row.names(METADATA)]
 NEW.COUNTS <- cqn_counts$E
 notEstimable = c()
 # Re-Assign the induvidualIDs
-#METADATA$individualID <- clean_md[ row.names(METADATA), ]$individualID
-METADATA$individualID <- clean_md[ row.names(METADATA), ]$totalID
+METADATA$individualID <- clean_md[ row.names(METADATA), ]$individualID
+#METADATA$individualID <- clean_md[ row.names(METADATA), ]$totalID
 METADATA$sex <- METADATA$Infered.Sex
 METADATA <- METADATA[ , colnames(METADATA) != 'Infered.Sex']
 while(length(residualSigCovars$significantCovars)!=0 && loopCount <= 20){
@@ -459,6 +459,7 @@ Have we regressed out the confounding variable signal
 ```{r residual.adj, cache=FALSE, fig.height=6, fig.width=8, results='asis', eval=TRUE}
 # Find PC of residual gene expression and significant covariates that are highly correlated with PCs
 METADATA$Family_ID <- as.factor(METADATA$Family_ID)
+METADATA$individualID <- as.factor(METADATA$individualID)
 residualSigCovars = runPCAandPlotCorrelations(expr, 
                                               METADATA,
                                               'adjusted design(voom-normalized)',
@@ -536,6 +537,7 @@ Sporadic: Sporadic AD Risk
 Genes that are differentially expressed at an FDR <= 0.05 and folde change of 1.2 are deemed significantly differentially expressed
 ```{r diff.exp0.5, cache=TRUE, eval=TRUE, fig.height=6, fig.width=8, results='asis'}
 # Get design matrix
+METADATA$individualID <- as.character( METADATA$totalID )
 METADATA_Sink <- METADATA
 METADATA$Comp <- as.character( METADATA$disease_cohort )
 METADATA[ METADATA$disease_cohort %in% 'FamilialAD' & METADATA$ind_mut_status %in% 'HasMut', ]$Comp <- 'FamilialAD_Mut'
